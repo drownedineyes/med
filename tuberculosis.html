@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Туберкулез: невидимая угроза и современная борьба — 3D Scrollytelling</title>
+    <!-- Подключение шрифтов Inter и Montserrat -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js & GSAP ScrollTrigger -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollToPlugin.min.js"></script>
+
+    <style>
+        :root {
+            --bg-dark: #0a0f1c;
+            --cyan-glow: #00f0ff;
+            --teal-glow: #10b981;
+            --red-alert: #ff2a55;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html, body {
+            background-color: var(--bg-dark);
+            color: #f8fafc;
+            font-family: 'Inter', sans-serif;
+            overflow-x: hidden;
+            scroll-behavior: auto; /* Управляется через GSAP */
+        }
+
+        h1, h2, h3, .font-display {
+            font-family: 'Montserrat', sans-serif;
+        }
+
+        /* Фиксированный 3D-холст на весь экран */
+        #webgl-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        /* Скролл-контейнер высотой 600vh для 5 плавных сцен */
+        #scroll-track {
+            position: relative;
+            width: 100%;
+            height: 600vh;
+            z-index: 2;
+        }
+
+        /* Glassmorphism карточки */
+        .glass-card {
+            background: rgba(12, 19, 36, 0.65);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+            border-radius: 1.25rem;
+            transition: border-color 0.4s ease, box-shadow 0.4s ease;
+        }
+
+        .glass-card.alert-theme {
+            border-color: rgba(255, 42, 85, 0.35);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(255, 42, 85, 0.12);
+        }
+
+        .glass-card.cyan-theme {
+            border-color: rgba(0, 240, 255, 0.35);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 240, 255, 0.12);
+        }
+
+        .glass-card.emerald-theme {
+            border-color: rgba(16, 185, 129, 0.35);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8), 0 0 30px rgba(16, 185, 129, 0.15);
+        }
+
+        /* Фиксированный слой для карточек сцен */
+        .scene-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            padding: 1rem;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }
+
+        .scene-overlay.panels-hidden {
+            opacity: 0;
+            transform: translateY(14px);
+        }
+
+        .scene-overlay.panels-hidden .scene-panel {
+            pointer-events: none !important;
+        }
+
+        .scene-panel {
+            pointer-events: auto;
+            opacity: 0;
+            transform: translateY(30px) scale(0.97);
+            visibility: hidden;
+            width: 100%;
+            max-width: 100%;
+            max-height: 44vh;
+            overflow-y: auto;
+        }
+
+        @media (min-width: 768px) {
+            .scene-panel {
+                width: 460px;
+                max-width: 460px;
+                max-height: 76vh;
+            }
+        }
+
+        /* Боковая навигация (точки этапов) */
+        .nav-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.25);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            cursor: pointer;
+        }
+
+        .nav-dot:hover {
+            background: rgba(255, 255, 255, 0.7);
+            transform: scale(1.3);
+        }
+
+        .nav-dot.active {
+            background: #00f0ff;
+            box-shadow: 0 0 12px #00f0ff, 0 0 24px rgba(0, 240, 255, 0.5);
+            height: 28px;
+        }
+
+        .nav-dot.active.danger {
+            background: #ff2a55;
+            box-shadow: 0 0 12px #ff2a55, 0 0 24px rgba(255, 42, 85, 0.5);
+        }
+
+        .nav-dot.active.safe {
+            background: #10b981;
+            box-shadow: 0 0 12px #10b981, 0 0 24px rgba(16, 185, 129, 0.5);
+        }
+
+        /* Пульсирующий индикатор сканера */
+        @keyframes pulseRing {
+            0% { transform: scale(0.85); opacity: 0.8; }
+            70% { transform: scale(1.8); opacity: 0; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+        .pulse-ring::before {
+            content: '';
+            position: absolute;
+            inset: -4px;
+            border-radius: 50%;
+            border: 1px solid currentColor;
+            animation: pulseRing 2s infinite;
+        }
+
+        /* Анимация подсказки скролла */
+        @keyframes scrollWheel {
+            0% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(10px); opacity: 0; }
+        }
+        .scroll-wheel-dot {
+            animation: scrollWheel 1.6s infinite ease-in-out;
+        }
+
+        /* Кастомный скроллбар */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #060911;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 240, 255, 0.3);
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(0, 240, 255, 0.6);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Экран загрузки -->
+    <div id="loader" class="fixed inset-0 z-50 bg-[#0a0f1c] flex flex-col items-center justify-center transition-opacity duration-700">
+        <div class="relative w-16 h-16 mb-5">
+            <div class="absolute inset-0 rounded-full border-2 border-cyan-500/20"></div>
+            <div class="absolute inset-0 rounded-full border-t-2 border-cyan-400 animate-spin"></div>
+            <div class="absolute inset-3 rounded-full border-b-2 border-rose-500 animate-spin" style="animation-direction: reverse; animation-duration: 1.5s;"></div>
+        </div>
+        <p class="font-display text-sm tracking-[0.25em] uppercase text-cyan-300">Инициализация 3D-среды</p>
+        <p class="text-xs text-slate-400 mt-2">Генерация клеточных структур и шейдеров...</p>
+    </div>
+
+    <!-- Верхний HUD-бар -->
+    <header class="fixed top-0 left-0 right-0 z-20 px-5 py-4 md:px-10 md:py-6 flex items-center justify-between pointer-events-none">
+        <div class="flex items-center gap-3 pointer-events-auto">
+            <div class="w-9 h-9 rounded-xl bg-cyan-500/10 border border-cyan-400/30 flex items-center justify-center text-cyan-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                </svg>
+            </div>
+            <div>
+                <span class="font-display font-bold text-xs md:text-sm tracking-wider uppercase text-white block">MED<span class="text-cyan-400">VISION</span> 3D</span>
+                <span class="text-[10px] md:text-xs text-slate-400 tracking-widest uppercase">Интерактивный атлас</span>
+            </div>
+        </div>
+
+        <!-- Индикатор текущего этапа в шапке -->
+        <div class="hidden sm:flex items-center gap-3 px-4 py-2 rounded-full bg-slate-900/60 backdrop-blur-md border border-white/10">
+            <span id="hud-dot" class="relative w-2.5 h-2.5 rounded-full bg-rose-500 text-rose-500 pulse-ring"></span>
+            <span id="hud-stage-label" class="text-xs font-medium tracking-wider uppercase text-slate-200">01 / Патоген: Палочка Коха</span>
+        </div>
+
+        <!-- Правый блок шапки: кнопка скрытия текста + процент прогресса -->
+        <div class="flex items-center gap-2.5 pointer-events-auto">
+            <button id="toggle-text-btn" type="button" title="Скрыть или показать текст (клавиша H)" class="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/70 hover:bg-slate-800/90 backdrop-blur-md border border-white/15 hover:border-cyan-400/50 text-xs font-medium text-slate-200 hover:text-cyan-300 transition-all cursor-pointer">
+                <svg id="icon-eye-off" class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"></path>
+                </svg>
+                <svg id="icon-eye-on" class="w-4 h-4 text-cyan-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
+                </svg>
+                <span id="toggle-text-label" class="hidden sm:inline">Скрыть текст</span>
+            </button>
+
+            <div class="text-right font-mono text-xs md:text-sm text-cyan-400 bg-slate-900/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10">
+                <span id="scroll-percent">00</span>%
+            </div>
+        </div>
+    </header>
+
+    <!-- Боковая навигация по 5 этапам -->
+    <nav aria-label="Навигация по сценам" class="fixed right-4 md:right-8 top-1/2 -translate-y-1/2 z-20 flex flex-col items-center gap-4">
+        <button class="nav-dot active danger" data-target="0" title="01. Палочка Коха"></button>
+        <button class="nav-dot danger" data-target="0.25" title="02. Путь заражения"></button>
+        <button class="nav-dot danger" data-target="0.50" title="03. Поражение легких"></button>
+        <button class="nav-dot" data-target="0.75" title="04. Диагностика и ДНК"></button>
+        <button class="nav-dot safe" data-target="0.98" title="05. Профилактика и защита"></button>
+    </nav>
+
+    <!-- Контейнер Three.js Canvas -->
+    <div id="webgl-container"></div>
+
+    <!-- Фиксированный слой с UI-плашками для каждой сцены -->
+    <div id="scene-overlay" class="scene-overlay">
+        <div class="w-full max-w-7xl mx-auto relative h-full flex flex-col justify-end md:justify-center pb-14 md:pb-0 pr-7 md:pr-0">
+
+            <!-- СЦЕНА 1: Введение (0% - 20%) -->
+            <article id="panel-0" class="scene-panel glass-card alert-theme p-4 sm:p-5 md:p-6 md:ml-4">
+                <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                    <span class="w-1.5 h-1.5 rounded-full bg-rose-400 animate-ping"></span>
+                    Этап 01 • Возбудитель
+                </div>
+                <h1 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white leading-snug mb-3">
+                    Туберкулез: <span class="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-300">Древний враг</span> в современном мире
+                </h1>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+                    Инфекционное заболевание, вызываемое бактерией <strong>Mycobacterium tuberculosis</strong> (палочкой Коха). Несмотря на прогресс медицины, туберкулез остается одной из главных глобальных угроз, ежегодно затрагивая миллионы людей.
+                </p>
+                <div class="grid grid-cols-2 gap-2.5 pt-3 border-t border-white/10 text-xs">
+                    <div class="bg-white/5 rounded-xl p-2.5">
+                        <span class="text-slate-400 text-[11px] block mb-0.5">Размер бактерии</span>
+                        <span class="text-white font-semibold">1–4 мкм в длину</span>
+                    </div>
+                    <div class="bg-white/5 rounded-xl p-2.5">
+                        <span class="text-slate-400 text-[11px] block mb-0.5">Клеточная стенка</span>
+                        <span class="text-rose-300 font-semibold">Липидная броня</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- СЦЕНА 2: Путь заражения (20% - 40%) -->
+            <article id="panel-1" class="scene-panel glass-card alert-theme p-5 md:p-6 md:ml-auto md:mr-14">
+                <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-orange-500/15 border border-orange-500/30 text-orange-300 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                    Этап 02 • Передача инфекции
+                </div>
+                <h2 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white leading-snug mb-3">
+                    Воздушно-капельный <span class="text-orange-400">путь</span>
+                </h2>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-3">
+                    При кашле, чихании или разговоре носитель выделяет невидимое облако мельчайших аэрозольных капель, внутри которых заключены микобактерии.
+                </p>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+                    Благодаря плотной воскоподобной оболочке палочка Коха обладает <strong>экстремальной живучестью</strong>: в пыли и темных помещениях она способна сохранять активность месяцами.
+                </p>
+                <div class="flex items-center gap-2.5 p-2.5 rounded-xl bg-rose-950/40 border border-rose-500/20 text-xs text-rose-200">
+                    <svg class="w-4 h-4 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                    <span>Всего 1–10 вдыхаемых бактерий достаточно для инфицирования альвеол.</span>
+                </div>
+            </article>
+
+            <!-- СЦЕНА 3: Поражение легких (40% - 60%) -->
+            <article id="panel-2" class="scene-panel glass-card alert-theme p-5 md:p-6 md:ml-4">
+                <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                    Этап 03 • Патогенез
+                </div>
+                <h2 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white leading-snug mb-3">
+                    Мишень — <span class="text-rose-400">дыхательная система</span>
+                </h2>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-3">
+                    Проникая в легкие, бактерии захватываются макрофагами. Иммунная система пытается изолировать угрозу, формируя плотный воспалительный узелок — <strong>туберкулезную гранулему</strong>.
+                </p>
+                <div class="pt-2.5 border-t border-white/10">
+                    <span class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 block mb-2">Тревожные симптомы:</span>
+                    <div class="flex flex-wrap gap-1.5 text-[11px]">
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200">Кашель более 3 недель</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200">Субфебрильная температура</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200">Ночная потливость</span>
+                        <span class="px-2.5 py-1 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-200">Слабость и потеря веса</span>
+                    </div>
+                </div>
+            </article>
+
+            <!-- СЦЕНА 4: Диагностика и прорыв в лечении (60% - 80%) -->
+            <article id="panel-3" class="scene-panel glass-card cyan-theme p-5 md:p-6 md:ml-auto md:mr-14">
+                <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-cyan-500/15 border border-cyan-400/30 text-cyan-300 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                    Этап 04 • Наука и терапия
+                </div>
+                <h2 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white leading-snug mb-3">
+                    Современная <span class="text-cyan-400">диагностика</span> и генетика
+                </h2>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-3">
+                    На смену долгому ожиданию пришли высокоточные методы: цифровая флюорография, иммунологический <strong>Диаскинтест</strong> и молекулярно-генетические системы <strong>GeneXpert</strong>, выявляющие ДНК бактерии за 2 часа.
+                </p>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed">
+                    Анализ мутаций позволяет мгновенно определить лекарственную устойчивость (МЛУ-ТБ) и подобрать персонализированную схему антибиотиков.
+                </p>
+            </article>
+
+            <!-- СЦЕНА 5: Профилактика и будущее без ТБ (80% - 100%) -->
+            <article id="panel-4" class="scene-panel glass-card emerald-theme p-5 md:p-6 md:ml-4">
+                <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[11px] font-semibold uppercase tracking-wider mb-3">
+                    Этап 05 • Защита и будущее
+                </div>
+                <h2 class="text-xl sm:text-2xl md:text-3xl font-extrabold text-white leading-snug mb-3">
+                    Профилактика и <span class="text-emerald-400">контроль</span>
+                </h2>
+                <p class="text-slate-300 text-xs sm:text-sm leading-relaxed mb-4">
+                    Туберкулез полностью излечим при своевременном выявлении. Вакцинация БЦЖ с рождения, ежегодный скрининг и забота об иммунитете формируют надежный барьер против инфекции.
+                </p>
+                <div class="flex flex-wrap items-center gap-3 pt-1">
+                    <button id="restart-btn" class="px-5 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-display font-bold text-xs sm:text-sm tracking-wide shadow-lg shadow-emerald-500/25 transition-all transform hover:-translate-y-0.5 active:translate-y-0 flex items-center gap-2 cursor-pointer">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                        </svg>
+                        Начать заново
+                    </button>
+                    <span class="text-xs text-slate-400">Берегите себя и дышите свободно</span>
+                </div>
+            </article>
+
+        </div>
+    </div>
+
+    <!-- Подсказка прокрутки внизу экрана (исчезает при скролле) -->
+    <div id="scroll-hint" class="fixed bottom-5 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 pointer-events-none transition-opacity duration-500">
+        <span class="text-[11px] uppercase tracking-[0.2em] text-slate-400">Прокрутите вниз</span>
+        <div class="w-5 h-8 rounded-full border border-slate-500/60 flex justify-center pt-1.5">
+            <div class="w-1 h-2 rounded-full bg-cyan-400 scroll-wheel-dot"></div>
+        </div>
+    </div>
+
+    <!-- Основной трек скролла -->
+    <main id="scroll-track"></main>
+
+    <script>
+        /**
+         * ============================================================================
+         * ИНТЕРАКТИВНАЯ 3D-ВЕБ-ПРЕЗЕНТАЦИЯ: «ТУБЕРКУЛЕЗ: НЕВИДИМАЯ УГРОЗА»
+         * Стек: Three.js (r128) + GSAP ScrollTrigger + Tailwind CSS
+         * ============================================================================
+         */
+
+        window.addEventListener('DOMContentLoaded', () => {
+            // Регистрация плагинов GSAP
+            gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+
+            // ------------------------------------------------------------------------
+            // 1. БАЗОВАЯ НАСТРОЙКА THREE.JS (СЦЕНА, КАМЕРА, РЕНДЕРЕР, ТУМАН)
+            // ------------------------------------------------------------------------
+            const container = document.getElementById('webgl-container');
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color('#0a0f1c');
+            // Объемный экспоненциальный туман для глубины микромира
+            scene.fog = new THREE.FogExp2('#0a0f1c', 0.022);
+
+            const camera = new THREE.PerspectiveCamera(
+                50,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                200
+            );
+
+            const renderer = new THREE.WebGLRenderer({
+                antialias: true,
+                powerPreference: 'high-performance'
+            });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.toneMapping = THREE.ACESFilmicToneMapping;
+            renderer.toneMappingExposure = 1.25;
+            container.appendChild(renderer.domElement);
+
+            // Группа-обертка для всей сцены (используется для параллакса от курсора мыши)
+            const worldGroup = new THREE.Group();
+            scene.add(worldGroup);
+
+            // ------------------------------------------------------------------------
+            // 2. НЕОНОВО-МЕДИЦИНСКОЕ ОСВЕЩЕНИЕ
+            // ------------------------------------------------------------------------
+            const ambientLight = new THREE.AmbientLight('#1e293b', 1.4);
+            scene.add(ambientLight);
+
+            // Холодный медицинский голубой свет
+            const cyanDirLight = new THREE.DirectionalLight('#00f0ff', 2.2);
+            cyanDirLight.position.set(10, 15, 12);
+            scene.add(cyanDirLight);
+
+            // Тревожный красный точечный свет (перемещается/пульсирует)
+            const redPointLight = new THREE.PointLight('#ff2a55', 3.5, 45);
+            redPointLight.position.set(-4, 2, 4);
+            worldGroup.add(redPointLight);
+
+            // Бирюзовый свет для зоны диагностики и защиты
+            const tealPointLight = new THREE.PointLight('#10b981', 3.0, 50);
+            tealPointLight.position.set(0, 4, -85);
+            worldGroup.add(tealPointLight);
+
+            // ------------------------------------------------------------------------
+            // 3. ПРОЦЕДУРНЫЕ ТЕКСТУРЫ И ШЕЙДЕРЫ
+            // ------------------------------------------------------------------------
+            // Генерация мягкой светящейся текстуры для частиц
+            function createGlowTexture(colorHex) {
+                const canvas = document.createElement('canvas');
+                canvas.width = 64;
+                canvas.height = 64;
+                const ctx = canvas.getContext('2d');
+                const grad = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+                grad.addColorStop(0, 'rgba(255, 255, 255, 1)');
+                grad.addColorStop(0.25, colorHex);
+                grad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = grad;
+                ctx.fillRect(0, 0, 64, 64);
+                return new THREE.CanvasTexture(canvas);
+            }
+
+            // Процедурная органическая карта рельефа (bumpMap) для бактерии
+            function createOrganicBumpTexture() {
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#808080';
+                ctx.fillRect(0, 0, 256, 256);
+                for (let i = 0; i < 1400; i++) {
+                    const x = Math.random() * 256;
+                    const y = Math.random() * 256;
+                    const r = 1 + Math.random() * 6;
+                    const shade = Math.floor(90 + Math.random() * 140);
+                    ctx.beginPath();
+                    ctx.arc(x, y, r, 0, Math.PI * 2);
+                    ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
+                    ctx.fill();
+                }
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                return tex;
+            }
+
+            const particleTexCyan = createGlowTexture('rgba(0, 240, 255, 0.7)');
+            const particleTexRed = createGlowTexture('rgba(255, 42, 85, 0.85)');
+            const organicBump = createOrganicBumpTexture();
+
+            // ------------------------------------------------------------------------
+            // 4. ФОНОВЫЕ МИКРОЧАСТИЦЫ (АЭРОЗОЛЬ / ПЫЛЬЦА ПО ВСЕМУ ПРОСТРАНСТВУ)
+            // ------------------------------------------------------------------------
+            const bgParticleCount = 1400;
+            const bgPositions = new Float32Array(bgParticleCount * 3);
+            const bgColors = new Float32Array(bgParticleCount * 3);
+            const cCyan = new THREE.Color('#00f0ff');
+            const cRed = new THREE.Color('#ff2a55');
+            const cTeal = new THREE.Color('#10b981');
+
+            for (let i = 0; i < bgParticleCount; i++) {
+                bgPositions[i * 3] = (Math.random() - 0.5) * 65;
+                bgPositions[i * 3 + 1] = (Math.random() - 0.5) * 45;
+                bgPositions[i * 3 + 2] = 15 - Math.random() * 145; // От z=15 до z=-130
+
+                const z = bgPositions[i * 3 + 2];
+                let col = cCyan;
+                if (z > -55) {
+                    col = Math.random() > 0.45 ? cRed : cCyan;
+                } else if (z > -90) {
+                    col = cCyan;
+                } else {
+                    col = cTeal;
+                }
+                bgColors[i * 3] = col.r;
+                bgColors[i * 3 + 1] = col.g;
+                bgColors[i * 3 + 2] = col.b;
+            }
+
+            const bgParticlesGeo = new THREE.BufferGeometry();
+            bgParticlesGeo.setAttribute('position', new THREE.BufferAttribute(bgPositions, 3));
+            bgParticlesGeo.setAttribute('color', new THREE.BufferAttribute(bgColors, 3));
+
+            const bgParticlesMat = new THREE.PointsMaterial({
+                size: 0.35,
+                map: particleTexCyan,
+                vertexColors: true,
+                transparent: true,
+                opacity: 0.75,
+                depthWrite: false,
+                blending: THREE.AdditiveBlending
+            });
+
+            const bgParticles = new THREE.Points(bgParticlesGeo, bgParticlesMat);
+            worldGroup.add(bgParticles);
+
+            // ========================================================================
+            // 5. СЦЕНА 1 (Z = 0): ПАЛОЧКА КОХА (MYCOBACTERIUM TUBERCULOSIS)
+            // ========================================================================
+            const scene1Group = new THREE.Group();
+            scene1Group.position.set(1.8, 0.2, 0);
+            worldGroup.add(scene1Group);
+
+            // Вспомогательная функция создания капсулы (совместимо с r128)
+            function createBacteriumMesh(length, radius, colorHex, emissiveHex, detail = 32) {
+                const group = new THREE.Group();
+
+                // Основное вытянутое тело (цилиндр + две полусферы)
+                const cylGeo = new THREE.CylinderGeometry(radius, radius, length, detail, 16, true);
+                const sphereGeo = new THREE.SphereGeometry(radius, detail, 16);
+
+                const mat = new THREE.MeshPhysicalMaterial({
+                    color: colorHex,
+                    emissive: emissiveHex,
+                    emissiveIntensity: 0.45,
+                    roughness: 0.35,
+                    metalness: 0.1,
+                    bumpMap: organicBump,
+                    bumpScale: 0.045,
+                    clearcoat: 0.7,
+                    clearcoatRoughness: 0.25
+                });
+
+                const body = new THREE.Mesh(cylGeo, mat);
+                const topCap = new THREE.Mesh(sphereGeo, mat);
+                topCap.position.y = length / 2;
+                const botCap = new THREE.Mesh(sphereGeo, mat);
+                botCap.position.y = -length / 2;
+
+                group.add(body, topCap, botCap);
+
+                // Полупрозрачная внешняя био-мембрана (липидная оболочка)
+                const auraMat = new THREE.MeshBasicMaterial({
+                    color: '#ff4d6d',
+                    transparent: true,
+                    opacity: 0.14,
+                    wireframe: false
+                });
+                const auraCyl = new THREE.Mesh(new THREE.CylinderGeometry(radius * 1.18, radius * 1.18, length, 20), auraMat);
+                const auraTop = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.18, 20, 12), auraMat);
+                auraTop.position.y = length / 2;
+                const auraBot = new THREE.Mesh(new THREE.SphereGeometry(radius * 1.18, 20, 12), auraMat);
+                auraBot.position.y = -length / 2;
+                group.add(auraCyl, auraTop, auraBot);
+
+                // Пили / ворсинки (фимбрии) вокруг палочки
+                const piliMat = new THREE.LineBasicMaterial({
+                    color: '#ff8fa3',
+                    transparent: true,
+                    opacity: 0.55
+                });
+                const piliCount = 65;
+                for (let i = 0; i < piliCount; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const yPos = (Math.random() - 0.5) * (length + radius * 1.2);
+                    const startR = radius * 0.98;
+                    const endR = radius * (1.28 + Math.random() * 0.35);
+
+                    const pStart = new THREE.Vector3(Math.cos(angle) * startR, yPos, Math.sin(angle) * startR);
+                    const pMid = new THREE.Vector3(
+                        Math.cos(angle + 0.15) * ((startR + endR) * 0.5),
+                        yPos + (Math.random() - 0.5) * 0.2,
+                        Math.sin(angle + 0.15) * ((startR + endR) * 0.5)
+                    );
+                    const pEnd = new THREE.Vector3(Math.cos(angle) * endR, yPos + (Math.random() - 0.5) * 0.35, Math.sin(angle) * endR);
+
+                    const curve = new THREE.QuadraticBezierCurve3(pStart, pMid, pEnd);
+                    const points = curve.getPoints(5);
+                    const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
+                    group.add(new THREE.Line(lineGeo, piliMat));
+                }
+
+                return group;
+            }
+
+            // Главная крупная палочка Коха с легким изгибом
+            const mainBacterium = createBacteriumMesh(3.4, 0.62, '#991b1b', '#ff1e42', 36);
+            mainBacterium.rotation.set(0.45, 0.3, -0.65);
+            scene1Group.add(mainBacterium);
+
+            // Две малые бактерии-спутники на заднем плане
+            const satBacterium1 = createBacteriumMesh(1.4, 0.26, '#7f1d1d', '#ff2a55', 16);
+            satBacterium1.position.set(-2.6, 1.8, -2.5);
+            satBacterium1.rotation.set(1.1, 0.5, 0.4);
+            scene1Group.add(satBacterium1);
+
+            const satBacterium2 = createBacteriumMesh(1.2, 0.22, '#7f1d1d', '#fb7185', 16);
+            satBacterium2.position.set(2.4, -2.1, -3.0);
+            satBacterium2.rotation.set(-0.7, 1.2, 0.8);
+            scene1Group.add(satBacterium2);
+
+            // ========================================================================
+            // 6. СЦЕНА 2 (Z = -26): ОБЛАКО АЭРОЗОЛЬНЫХ МИКРОКАПЕЛЬ С БАКТЕРИЯМИ
+            // ========================================================================
+            const scene2Group = new THREE.Group();
+            scene2Group.position.set(-1.5, 0, -26);
+            worldGroup.add(scene2Group);
+
+            const droplets = [];
+            const dropletCount = 26;
+            const dropletGeo = new THREE.SphereGeometry(1, 24, 24);
+            const dropletMat = new THREE.MeshPhysicalMaterial({
+                color: '#38bdf8',
+                emissive: '#0284c7',
+                emissiveIntensity: 0.25,
+                transparent: true,
+                opacity: 0.28,
+                roughness: 0.1,
+                metalness: 0.05,
+                clearcoat: 1.0
+            });
+            const dropletWireMat = new THREE.MeshBasicMaterial({
+                color: '#7dd3fc',
+                wireframe: true,
+                transparent: true,
+                opacity: 0.08
+            });
+            const miniBacGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.42, 8);
+            const miniBacMat = new THREE.MeshBasicMaterial({ color: '#ff2a55' });
+
+            for (let i = 0; i < dropletCount; i++) {
+                const dGroup = new THREE.Group();
+                const scale = 0.35 + Math.random() * 0.65;
+
+                const sphere = new THREE.Mesh(dropletGeo, dropletMat);
+                const wire = new THREE.Mesh(dropletGeo, dropletWireMat);
+                dGroup.add(sphere, wire);
+
+                // Внутри каждой капли — 1–2 светящиеся красные палочки
+                const innerCount = Math.random() > 0.4 ? 2 : 1;
+                for (let j = 0; j < innerCount; j++) {
+                    const bac = new THREE.Mesh(miniBacGeo, miniBacMat);
+                    bac.position.set((Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4, (Math.random() - 0.5) * 0.4);
+                    bac.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+                    dGroup.add(bac);
+                }
+
+                dGroup.scale.setScalar(scale);
+
+                // Компактная начальная позиция и разлетная позиция при скролле
+                const theta = Math.random() * Math.PI * 2;
+                const phi = Math.acos(2 * Math.random() - 1);
+                const rBase = 0.8 + Math.random() * 2.4;
+
+                const basePos = new THREE.Vector3(
+                    rBase * Math.sin(phi) * Math.cos(theta),
+                    rBase * Math.sin(phi) * Math.sin(theta),
+                    rBase * Math.cos(phi)
+                );
+
+                const spreadPos = basePos.clone().multiplyScalar(2.6 + Math.random() * 1.4);
+
+                dGroup.position.copy(basePos);
+                scene2Group.add(dGroup);
+
+                droplets.push({
+                    mesh: dGroup,
+                    basePos,
+                    spreadPos,
+                    phase: Math.random() * Math.PI * 2,
+                    rotSpeed: (Math.random() - 0.5) * 0.02
+                });
+            }
+
+            // ========================================================================
+            // 7. СЦЕНА 3 (Z = -54): ГОЛОГРАФИЧЕСКИЕ ЛЕГКИЕ И ОЧАГ ВОСПАЛЕНИЯ (ГРАНУЛЕМА)
+            // ========================================================================
+            const scene3Group = new THREE.Group();
+            scene3Group.position.set(1.8, -0.2, -54);
+            worldGroup.add(scene3Group);
+
+            // Процедурное построение пары голографических легких
+            function createLungLobe(isRightLung) {
+                const dir = isRightLung ? 1 : -1;
+                const points = [];
+                const rings = 34;
+                const segs = 28;
+
+                for (let i = 0; i <= rings; i++) {
+                    const v = i / rings; // 0 (верхушка) -> 1 (основание)
+                    const y = (0.5 - v) * 5.6;
+
+                    // Анатомический профиль доли легкого
+                    const widthProfile = Math.sin(Math.pow(v, 0.72) * Math.PI) * 1.85;
+                    const depthProfile = Math.sin(Math.pow(v, 0.75) * Math.PI) * 1.45;
+
+                    for (let j = 0; j < segs; j++) {
+                        const u = (j / segs) * Math.PI * 2;
+                        let x = Math.cos(u) * widthProfile;
+                        let z = Math.sin(u) * depthProfile;
+
+                        // Внутренняя выемка (сердечная вырезка) ближе к центру
+                        if (x * dir < 0) {
+                            x *= 0.42;
+                        }
+                        // Небольшой изгиб основания
+                        const baseArch = v > 0.75 ? Math.sin(u) * 0.25 * (v - 0.75) * 4 : 0;
+
+                        points.push(new THREE.Vector3(x + dir * 1.35, y + baseArch, z));
+                    }
+                }
+
+                const geo = new THREE.BufferGeometry().setFromPoints(points);
+                const mat = new THREE.PointsMaterial({
+                    color: '#00f0ff',
+                    size: 0.085,
+                    transparent: true,
+                    opacity: 0.72,
+                    blending: THREE.AdditiveBlending
+                });
+                return new THREE.Points(geo, mat);
+            }
+
+            const rightLung = createLungLobe(true);
+            const leftLung = createLungLobe(false);
+            scene3Group.add(rightLung, leftLung);
+
+            // Трахея и бронхиальное дерево из светящихся линий
+            const bronchusMat = new THREE.LineBasicMaterial({
+                color: '#38bdf8',
+                transparent: true,
+                opacity: 0.55
+            });
+
+            function addBranch(p1, p2, p3) {
+                const curve = new THREE.QuadraticBezierCurve3(p1, p2, p3);
+                const geo = new THREE.BufferGeometry().setFromPoints(curve.getPoints(16));
+                scene3Group.add(new THREE.Line(geo, bronchusMat));
+            }
+
+            // Трахея и главные бронхи
+            addBranch(new THREE.Vector3(0, 3.8, 0), new THREE.Vector3(0, 2.5, 0), new THREE.Vector3(0, 1.6, 0));
+            addBranch(new THREE.Vector3(0, 1.6, 0), new THREE.Vector3(0.7, 1.1, 0), new THREE.Vector3(1.5, 0.3, 0.1));
+            addBranch(new THREE.Vector3(0, 1.6, 0), new THREE.Vector3(-0.7, 1.1, 0), new THREE.Vector3(-1.5, 0.3, -0.1));
+            // Вторичные бронхи
+            addBranch(new THREE.Vector3(1.5, 0.3, 0.1), new THREE.Vector3(1.9, 0.8, 0.2), new THREE.Vector3(2.1, 1.4, 0.1));
+            addBranch(new THREE.Vector3(1.5, 0.3, 0.1), new THREE.Vector3(1.8, -0.6, 0.1), new THREE.Vector3(2.0, -1.5, 0.2));
+            addBranch(new THREE.Vector3(-1.5, 0.3, -0.1), new THREE.Vector3(-1.9, 0.7, -0.2), new THREE.Vector3(-2.1, 1.3, 0));
+            addBranch(new THREE.Vector3(-1.5, 0.3, -0.1), new THREE.Vector3(-1.8, -0.7, 0.1), new THREE.Vector3(-2.0, -1.6, -0.2));
+
+            // Пульсирующий красный очаг воспаления (Туберкулезная гранулема) в правом легком
+            const granulomaGroup = new THREE.Group();
+            granulomaGroup.position.set(1.65, 0.55, 0.25);
+            scene3Group.add(granulomaGroup);
+
+            const granulomaCore = new THREE.Mesh(
+                new THREE.SphereGeometry(0.45, 24, 24),
+                new THREE.MeshBasicMaterial({ color: '#ff2a55' })
+            );
+            const granulomaHalo = new THREE.Mesh(
+                new THREE.SphereGeometry(0.85, 24, 24),
+                new THREE.MeshBasicMaterial({
+                    color: '#ff2a55',
+                    transparent: true,
+                    opacity: 0.28
+                })
+            );
+            granulomaGroup.add(granulomaCore, granulomaHalo);
+
+            // Частицы, стягивающиеся к очагу воспаления
+            const infParticleCount = 90;
+            const infGeo = new THREE.BufferGeometry();
+            const infPositions = new Float32Array(infParticleCount * 3);
+            const infData = [];
+
+            for (let i = 0; i < infParticleCount; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const radius = 0.6 + Math.random() * 1.6;
+                const y = (Math.random() - 0.5) * 2.2;
+                infPositions[i * 3] = Math.cos(angle) * radius;
+                infPositions[i * 3 + 1] = y;
+                infPositions[i * 3 + 2] = Math.sin(angle) * radius;
+                infData.push({ angle, radius, speed: 0.008 + Math.random() * 0.012, y });
+            }
+            infGeo.setAttribute('position', new THREE.BufferAttribute(infPositions, 3));
+            const infParticles = new THREE.Points(
+                infGeo,
+                new THREE.PointsMaterial({
+                    color: '#ff4d6d',
+                    size: 0.16,
+                    map: particleTexRed,
+                    transparent: true,
+                    blending: THREE.AdditiveBlending,
+                    depthWrite: false
+                })
+            );
+            granulomaGroup.add(infParticles);
+
+            // ========================================================================
+            // 8. СЦЕНА 4 (Z = -82): ДВОЙНАЯ СПИРАЛЬ ДНК (ПЦР-ДИАГНОСТИКА И ТЕРАПИЯ)
+            // ========================================================================
+            const scene4Group = new THREE.Group();
+            scene4Group.position.set(-1.6, 0, -82);
+            scene4Group.rotation.z = -0.35;
+            worldGroup.add(scene4Group);
+
+            const dnaPairs = 28;
+            const dnaHeight = 7.2;
+            const dnaRadius = 1.25;
+            const dnaRungs = [];
+
+            const strandMat1 = new THREE.MeshStandardMaterial({
+                color: '#00f0ff',
+                emissive: '#00f0ff',
+                emissiveIntensity: 0.7,
+                roughness: 0.2
+            });
+            const strandMat2 = new THREE.MeshStandardMaterial({
+                color: '#38bdf8',
+                emissive: '#0284c7',
+                emissiveIntensity: 0.7,
+                roughness: 0.2
+            });
+            const nodeGeo = new THREE.SphereGeometry(0.14, 16, 16);
+
+            for (let i = 0; i < dnaPairs; i++) {
+                const t = i / (dnaPairs - 1);
+                const y = (t - 0.5) * dnaHeight;
+                const angle = t * Math.PI * 4.2;
+
+                const x1 = Math.cos(angle) * dnaRadius;
+                const z1 = Math.sin(angle) * dnaRadius;
+                const x2 = Math.cos(angle + Math.PI) * dnaRadius;
+                const z2 = Math.sin(angle + Math.PI) * dnaRadius;
+
+                const pairGroup = new THREE.Group();
+                pairGroup.position.y = y;
+
+                // Нуклеотидные узлы на цепях
+                const node1 = new THREE.Mesh(nodeGeo, strandMat1);
+                node1.position.set(x1, 0, z1);
+                const node2 = new THREE.Mesh(nodeGeo, strandMat2);
+                node2.position.set(x2, 0, z2);
+
+                // Водородная перемычка между цепями
+                const rungGeo = new THREE.CylinderGeometry(0.035, 0.035, dnaRadius * 2, 8);
+                rungGeo.rotateZ(Math.PI / 2);
+                const rungMat = new THREE.MeshBasicMaterial({
+                    color: i % 2 === 0 ? '#00f0ff' : '#10b981',
+                    transparent: true,
+                    opacity: 0.75
+                });
+                const rung = new THREE.Mesh(rungGeo, rungMat);
+                rung.rotation.y = -angle;
+
+                pairGroup.add(node1, node2, rung);
+                scene4Group.add(pairGroup);
+
+                dnaRungs.push({
+                    group: pairGroup,
+                    baseAngle: angle,
+                    index: i
+                });
+            }
+
+            // ========================================================================
+            // 9. СЦЕНА 5 (Z = -110): ЗАЩИТНЫЙ ЭНЕРГЕТИЧЕСКИЙ ЩИТ И ЗДОРОВАЯ СФЕРА
+            // ========================================================================
+            const scene5Group = new THREE.Group();
+            scene5Group.position.set(1.7, 0, -110);
+            worldGroup.add(scene5Group);
+
+            // Внутреннее светящееся ядро здоровой клетки
+            const coreSphere = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(1.35, 4),
+                new THREE.MeshPhysicalMaterial({
+                    color: '#10b981',
+                    emissive: '#059669',
+                    emissiveIntensity: 0.65,
+                    roughness: 0.2,
+                    clearcoat: 1.0
+                })
+            );
+            scene5Group.add(coreSphere);
+
+            // Внешний геодезический защитный щит (БЦЖ / Иммунитет)
+            const shieldWire = new THREE.Mesh(
+                new THREE.IcosahedronGeometry(2.35, 2),
+                new THREE.MeshBasicMaterial({
+                    color: '#00f0ff',
+                    wireframe: true,
+                    transparent: true,
+                    opacity: 0.35
+                })
+            );
+            scene5Group.add(shieldWire);
+
+            // Орбитальные защитные кольца
+            const ringGeo = new THREE.TorusGeometry(2.85, 0.025, 16, 100);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: '#34d399',
+                transparent: true,
+                opacity: 0.65
+            });
+            const orbitRing1 = new THREE.Mesh(ringGeo, ringMat);
+            orbitRing1.rotation.x = Math.PI / 2.5;
+            const orbitRing2 = new THREE.Mesh(ringGeo, ringMat);
+            orbitRing2.rotation.y = Math.PI / 3;
+            scene5Group.add(orbitRing1, orbitRing2);
+
+            // ========================================================================
+            // 10. ТРАЕКТОРИЯ КАМЕРЫ (CATMULL-ROM SPLINE) И ПРИВЯЗКА К GSAP SCROLLTRIGGER
+            // ========================================================================
+            const cameraPath = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(0, 0.3, 8.5),     // Старт: Сцена 1 (Палочка Коха)
+                new THREE.Vector3(-0.4, 0.1, -18.5), // Сцена 2 (Облако аэрозоля)
+                new THREE.Vector3(0.4, 0.0, -45.5),  // Сцена 3 (Легкие и гранулема)
+                new THREE.Vector3(-0.3, 0.1, -73.5), // Сцена 4 (ДНК-диагностика)
+                new THREE.Vector3(0.2, 0.0, -101.0)  // Сцена 5 (Защитный щит)
+            ]);
+
+            const lookAtPath = new THREE.CatmullRomCurve3([
+                new THREE.Vector3(1.2, 0.1, 0),
+                new THREE.Vector3(-1.0, 0.0, -26),
+                new THREE.Vector3(1.2, -0.1, -54),
+                new THREE.Vector3(-1.0, 0.0, -82),
+                new THREE.Vector3(1.1, 0.0, -110)
+            ]);
+
+            const scrollState = { progress: 0 };
+
+            // UI элементы
+            const panels = [
+                document.getElementById('panel-0'),
+                document.getElementById('panel-1'),
+                document.getElementById('panel-2'),
+                document.getElementById('panel-3'),
+                document.getElementById('panel-4')
+            ];
+            const navDots = document.querySelectorAll('.nav-dot');
+            const percentEl = document.getElementById('scroll-percent');
+            const hudLabelEl = document.getElementById('hud-stage-label');
+            const hudDotEl = document.getElementById('hud-dot');
+            const scrollHintEl = document.getElementById('scroll-hint');
+
+            const stageMeta = [
+                { label: '01 / Патоген: Палочка Коха', color: 'bg-rose-500 text-rose-500' },
+                { label: '02 / Передача: Аэрозоль', color: 'bg-orange-500 text-orange-500' },
+                { label: '03 / Органы: Поражение легких', color: 'bg-rose-500 text-rose-500' },
+                { label: '04 / Наука: ПЦР и терапия', color: 'bg-cyan-400 text-cyan-400' },
+                { label: '05 / Защита: Профилактика', color: 'bg-emerald-400 text-emerald-400' }
+            ];
+
+            let currentActiveStage = -1;
+
+            function updateUI(p) {
+                // Обновление процентов
+                const pct = Math.round(p * 100);
+                percentEl.textContent = pct < 10 ? `0${pct}` : pct;
+
+                // Скрытие подсказки прокрутки
+                if (p > 0.03) {
+                    scrollHintEl.style.opacity = '0';
+                } else {
+                    scrollHintEl.style.opacity = '1';
+                }
+
+                // Определение активного этапа (5 интервалов по 0.2)
+                let stageIdx = 0;
+                if (p < 0.18) stageIdx = 0;
+                else if (p < 0.42) stageIdx = 1;
+                else if (p < 0.66) stageIdx = 2;
+                else if (p < 0.88) stageIdx = 3;
+                else stageIdx = 4;
+
+                if (stageIdx !== currentActiveStage) {
+                    currentActiveStage = stageIdx;
+
+                    // Плавное появление/исчезновение карточек
+                    panels.forEach((panel, idx) => {
+                        if (idx === stageIdx) {
+                            gsap.to(panel, {
+                                autoAlpha: 1,
+                                y: 0,
+                                scale: 1,
+                                duration: 0.65,
+                                ease: 'power3.out',
+                                overwrite: true
+                            });
+                        } else {
+                            gsap.to(panel, {
+                                autoAlpha: 0,
+                                y: idx < stageIdx ? -25 : 25,
+                                scale: 0.97,
+                                duration: 0.45,
+                                ease: 'power2.in',
+                                overwrite: true
+                            });
+                        }
+                    });
+
+                    // Обновление боковых точек
+                    navDots.forEach((dot, idx) => {
+                        dot.classList.toggle('active', idx === stageIdx);
+                    });
+
+                    // Обновление HUD в шапке
+                    hudLabelEl.textContent = stageMeta[stageIdx].label;
+                    hudDotEl.className = `relative w-2.5 h-2.5 rounded-full pulse-ring ${stageMeta[stageIdx].color}`;
+                }
+            }
+
+            // Инициализируем первую карточку сразу
+            updateUI(0);
+
+            // Основной ScrollTrigger на весь трек
+            ScrollTrigger.create({
+                trigger: '#scroll-track',
+                start: 'top top',
+                end: 'bottom bottom',
+                scrub: 1.1, // Плавная инерция при прокрутке
+                onUpdate: (self) => {
+                    scrollState.progress = self.progress;
+                    updateUI(self.progress);
+                }
+            });
+
+            // Клик по точкам навигации справа
+            navDots.forEach((dot) => {
+                dot.addEventListener('click', () => {
+                    const targetProgress = parseFloat(dot.getAttribute('data-target'));
+                    const maxScroll = document.documentElement.scrollHeight - window.innerHeight;
+                    gsap.to(window, {
+                        scrollTo: targetProgress * maxScroll,
+                        duration: 1.6,
+                        ease: 'power3.inOut'
+                    });
+                });
+            });
+
+            // Кнопка «Начать заново» на финальном слайде
+            document.getElementById('restart-btn').addEventListener('click', () => {
+                gsap.to(window, {
+                    scrollTo: 0,
+                    duration: 2.0,
+                    ease: 'power3.inOut'
+                });
+            });
+
+            // ========================================================================
+            // 11. ПАРАЛЛАКС ОТ КУРСОРА МЫШИ И АДАПТИВНОСТЬ
+            // ========================================================================
+            const mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+            window.addEventListener('mousemove', (e) => {
+                mouse.targetX = (e.clientX / window.innerWidth - 0.5) * 2;
+                mouse.targetY = (e.clientY / window.innerHeight - 0.5) * 2;
+            });
+
+            // Поддержка сенсорного наклона на мобильных устройствах
+            window.addEventListener('touchmove', (e) => {
+                if (e.touches.length > 0) {
+                    mouse.targetX = (e.touches[0].clientX / window.innerWidth - 0.5) * 2;
+                    mouse.targetY = (e.touches[0].clientY / window.innerHeight - 0.5) * 2;
+                }
+            }, { passive: true });
+
+            // Функция скрытия / показа текстовых плашек
+            let isTextHidden = false;
+            const sceneOverlayEl = document.getElementById('scene-overlay');
+            const toggleTextBtn = document.getElementById('toggle-text-btn');
+            const toggleTextLabel = document.getElementById('toggle-text-label');
+            const iconEyeOff = document.getElementById('icon-eye-off');
+            const iconEyeOn = document.getElementById('icon-eye-on');
+
+            function toggleTextPanels() {
+                isTextHidden = !isTextHidden;
+                sceneOverlayEl.classList.toggle('panels-hidden', isTextHidden);
+                toggleTextLabel.textContent = isTextHidden ? 'Показать текст' : 'Скрыть текст';
+                iconEyeOff.classList.toggle('hidden', isTextHidden);
+                iconEyeOn.classList.toggle('hidden', !isTextHidden);
+                updateSceneLayout();
+            }
+
+            toggleTextBtn.addEventListener('click', toggleTextPanels);
+            window.addEventListener('keydown', (e) => {
+                if (e.key === 'h' || e.key === 'H' || e.key === 'р' || e.key === 'Р') {
+                    toggleTextPanels();
+                }
+            });
+
+            // Адаптация позиций 3D-объектов в зависимости от размера экрана и видимости текста
+            function updateSceneLayout() {
+                const w = window.innerWidth;
+                const isMobile = w < 768;
+
+                // Если текст скрыт — плавно центрируем 3D-модели в кадре
+                const targets = isTextHidden
+                    ? [
+                        { x: 0, y: 0, z: 0 },
+                        { x: 0, y: 0, z: -26 },
+                        { x: 0, y: 0, z: -54 },
+                        { x: 0, y: 0, z: -82 },
+                        { x: 0, y: 0, z: -110 }
+                    ]
+                    : [
+                        { x: isMobile ? 0 : 1.5, y: isMobile ? 1.15 : 0.15, z: 0 },
+                        { x: isMobile ? 0 : -1.3, y: isMobile ? 1.15 : 0, z: -26 },
+                        { x: isMobile ? 0 : 1.5, y: isMobile ? 1.05 : -0.15, z: -54 },
+                        { x: isMobile ? 0 : -1.4, y: isMobile ? 1.05 : 0, z: -82 },
+                        { x: isMobile ? 0 : 1.4, y: isMobile ? 1.15 : 0, z: -110 }
+                    ];
+
+                const groups = [scene1Group, scene2Group, scene3Group, scene4Group, scene5Group];
+                groups.forEach((grp, idx) => {
+                    gsap.to(grp.position, {
+                        x: targets[idx].x,
+                        y: targets[idx].y,
+                        z: targets[idx].z,
+                        duration: 0.65,
+                        ease: 'power2.out'
+                    });
+                });
+            }
+
+            // Обработка изменения размеров окна
+            function handleResize() {
+                const w = window.innerWidth;
+                const h = window.innerHeight;
+                camera.aspect = w / h;
+                camera.updateProjectionMatrix();
+                renderer.setSize(w, h);
+                updateSceneLayout();
+            }
+
+            window.addEventListener('resize', handleResize);
+            handleResize();
+
+            // ========================================================================
+            // 12. ЦИКЛ АНИМАЦИИ (RENDER LOOP)
+            // ========================================================================
+            const clock = new THREE.Clock();
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const elapsed = clock.getElapsedTime();
+                const p = scrollState.progress;
+
+                // 1. Позиционирование камеры вдоль сплайна
+                const camPos = cameraPath.getPointAt(p);
+                const lookPos = lookAtPath.getPointAt(p);
+                camera.position.copy(camPos);
+                camera.lookAt(lookPos);
+
+                // 2. Плавный параллакс всей сцены при движении мыши
+                mouse.x += (mouse.targetX - mouse.x) * 0.05;
+                mouse.y += (mouse.targetY - mouse.y) * 0.05;
+                worldGroup.rotation.y = mouse.x * 0.07;
+                worldGroup.rotation.x = mouse.y * 0.05;
+
+                // 3. Анимация Сцены 1: Парение и вращение палочки Коха
+                mainBacterium.rotation.y += 0.004;
+                mainBacterium.position.y = Math.sin(elapsed * 1.4) * 0.18;
+                satBacterium1.rotation.x += 0.006;
+                satBacterium1.position.y = 1.8 + Math.cos(elapsed * 1.2) * 0.2;
+                satBacterium2.rotation.z -= 0.005;
+
+                // 4. Анимация Сцены 2: Динамическое рассеивание облака капель при скролле
+                // Пик близости к сцене 2 находится в районе p = 0.25
+                const scatterFactor = THREE.MathUtils.clamp((p - 0.12) * 4.5, 0, 1);
+                droplets.forEach((d) => {
+                    d.mesh.position.lerpVectors(d.basePos, d.spreadPos, scatterFactor);
+                    d.mesh.position.y += Math.sin(elapsed * 1.6 + d.phase) * 0.08;
+                    d.mesh.rotation.y += d.rotSpeed;
+                    d.mesh.rotation.x += d.rotSpeed * 0.5;
+                });
+
+                // 5. Анимация Сцены 3: Дыхание легких и пульсация гранулемы
+                const breath = 1 + Math.sin(elapsed * 1.8) * 0.03;
+                rightLung.scale.set(breath, breath, breath);
+                leftLung.scale.set(breath, breath, breath);
+                scene3Group.rotation.y = Math.sin(elapsed * 0.5) * 0.22;
+
+                const pulse = 1 + Math.sin(elapsed * 4.5) * 0.25;
+                granulomaHalo.scale.setScalar(pulse);
+                redPointLight.intensity = 2.8 + Math.sin(elapsed * 4.5) * 1.2;
+
+                // Стягивание частиц инфекции к центру гранулемы
+                const infPosAttr = infGeo.attributes.position;
+                for (let i = 0; i < infParticleCount; i++) {
+                    const item = infData[i];
+                    item.radius -= item.speed;
+                    item.angle += 0.02;
+                    if (item.radius < 0.25) {
+                        item.radius = 1.8 + Math.random() * 0.5;
+                    }
+                    infPosAttr.setXYZ(
+                        i,
+                        Math.cos(item.angle) * item.radius,
+                        item.y * (item.radius / 1.8),
+                        Math.sin(item.angle) * item.radius
+                    );
+                }
+                infPosAttr.needsUpdate = true;
+
+                // 6. Анимация Сцены 4: Раскручивание двойной спирали ДНК
+                const unwindFactor = THREE.MathUtils.clamp((p - 0.62) * 5, 0, 1);
+                dnaRungs.forEach((r) => {
+                    r.group.rotation.y = elapsed * 0.8 + unwindFactor * 1.4;
+                    const wave = 1 + Math.sin(elapsed * 2.5 + r.index * 0.3) * 0.06;
+                    r.group.scale.set(wave, 1, wave);
+                });
+
+                // 7. Анимация Сцены 5: Пульсация защитного щита
+                shieldWire.rotation.y = elapsed * 0.25;
+                shieldWire.rotation.x = elapsed * 0.15;
+                coreSphere.scale.setScalar(1 + Math.sin(elapsed * 2.2) * 0.06);
+                orbitRing1.rotation.z = elapsed * 0.6;
+                orbitRing2.rotation.z = -elapsed * 0.45;
+
+                // Медленный дрейф фоновых микрочастиц
+                bgParticles.rotation.z = elapsed * 0.015;
+
+                renderer.render(scene, camera);
+            }
+
+            // Плавное скрытие лоадера и запуск рендера
+            setTimeout(() => {
+                const loader = document.getElementById('loader');
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 700);
+                animate();
+            }, 400);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,1829 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MED-SCAN OS v4.2 // Бронхит: Погружение в диагностику</title>
+
+  <!--
+  =====================================================================================
+  ИНСТРУКЦИЯ ПО ЗАПУСКУ И АРХИТЕКТУРА ПРОЕКТА:
+  1. Это полностью автономный однофайловый веб-приложение (HTML5 + CSS3 + ES6 JS).
+  2. Для запуска достаточно открыть файл `bronchitis_medtech_3d.html` в любом современном
+     браузере (Chrome, Edge, Firefox, Safari). Локальный сервер не обязателен, но
+     требуется доступ в интернет для загрузки CDN-библиотек (Three.js, GSAP, шрифты).
+  3. Используемые библиотеки:
+     - Three.js (r128): рендеринг процедурного 3D-дерева бронхов, легочного каркаса,
+       узлов альвеол и динамических частиц воспаления/слизи с аддитивным свечением.
+     - GSAP 3 + ScrollTrigger + ScrollToPlugin: кинематографичная хореография камеры,
+       плавный морфинг цветовой палитры тканей (Норма -> Воспаление -> Регенерация).
+     - Web Audio API: процедура генерации реалистичного акустического сигнала
+       (везикулярное дыхание против сухих свистящих хрипов при обструкции).
+  =====================================================================================
+  -->
+
+  <!-- Подключение шрифтов для футуристичного медицинского HUD-интерфейса -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet" />
+
+  <!-- Подключение Tailwind CSS для быстрой и адаптивной верстки HUD-слоев -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Подключение Three.js (3D-движок) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <!-- Подключение GSAP и плагинов ScrollTrigger & ScrollToPlugin -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollToPlugin.min.js"></script>
+
+  <style>
+    /* ==========================================================================
+       БАЗОВЫЕ ПЕРЕМЕННЫЕ И СТИЛИ SCI-FI MEDTECH
+       ========================================================================== */
+    :root {
+      --bg-deep: #040812;
+      --cyan-neon: #00f3ff;
+      --bio-green: #00ff9d;
+      --alert-orange: #ff3b1d;
+      --alert-amber: #ff6b00;
+      --glass-bg: rgba(8, 18, 36, 0.58);
+      --glass-border: rgba(0, 243, 255, 0.24);
+    }
+
+    * {
+      box-sizing: border-box;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(0, 243, 255, 0.4) #040812;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: var(--bg-deep);
+      color: #e6f4ff;
+      font-family: 'Inter', sans-serif;
+      overflow-x: hidden;
+      scroll-behavior: smooth;
+    }
+
+    /* Заголовки и технические метки */
+    .font-display {
+      font-family: 'Orbitron', sans-serif;
+    }
+    .font-mono-tech {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Фиксированный 3D-холст на заднем плане */
+    #webgl-container {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* Сетка сканера и виньетка поверх 3D для глубины погружения */
+    .hud-grid-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+      background-image:
+        radial-gradient(circle at 50% 50%, transparent 45%, rgba(4, 8, 18, 0.85) 100%),
+        linear-gradient(rgba(0, 243, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 243, 255, 0.03) 1px, transparent 1px);
+      background-size: 100% 100%, 48px 48px, 48px 48px;
+    }
+
+    /* Эффект Glassmorphism для медицинских панелей */
+    .glass-panel {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.6),
+        inset 0 0 20px rgba(0, 243, 255, 0.06);
+      border-radius: 16px;
+      transition: border-color 0.35s ease, box-shadow 0.35s ease, transform 0.25s ease;
+    }
+
+    .glass-panel:hover {
+      border-color: rgba(0, 243, 255, 0.55);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.7),
+        0 0 24px rgba(0, 243, 255, 0.16),
+        inset 0 0 24px rgba(0, 243, 255, 0.1);
+    }
+
+    /* Вариант панели в тревожном режиме воспаления */
+    .glass-panel-alert {
+      border-color: rgba(255, 59, 29, 0.35);
+      box-shadow:
+        0 12px 40px rgba(0, 0, 0, 0.65),
+        inset 0 0 22px rgba(255, 59, 29, 0.08);
+    }
+    .glass-panel-alert:hover {
+      border-color: rgba(255, 107, 0, 0.75);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.75),
+        0 0 28px rgba(255, 59, 29, 0.25);
+    }
+
+    /* Угловые тактические засечки (Corner Brackets) */
+    .hud-corners {
+      position: relative;
+    }
+    .hud-corners::before,
+    .hud-corners::after {
+      content: '';
+      position: absolute;
+      width: 14px;
+      height: 14px;
+      pointer-events: none;
+      transition: all 0.3s ease;
+    }
+    .hud-corners::before {
+      top: -1px;
+      left: -1px;
+      border-top: 2px solid var(--cyan-neon);
+      border-left: 2px solid var(--cyan-neon);
+      border-top-left-radius: 6px;
+    }
+    .hud-corners::after {
+      bottom: -1px;
+      right: -1px;
+      border-bottom: 2px solid var(--cyan-neon);
+      border-right: 2px solid var(--cyan-neon);
+      border-bottom-right-radius: 6px;
+    }
+
+    /* ==========================================================================
+       ГЛИТЧ-ЭФФЕКТ ДЛЯ ЗАГОЛОВКА ПЕРВОЙ СЦЕНЫ
+       ========================================================================== */
+    .glitch-title {
+      position: relative;
+      text-shadow: 0 0 22px rgba(0, 243, 255, 0.45);
+    }
+    .glitch-title::before,
+    .glitch-title::after {
+      content: attr(data-text);
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.75;
+    }
+    .glitch-title::before {
+      color: #00f3ff;
+      z-index: -1;
+      animation: glitch-anim-1 3.8s infinite linear alternate-reverse;
+    }
+    .glitch-title::after {
+      color: #ff3b1d;
+      z-index: -2;
+      animation: glitch-anim-2 2.9s infinite linear alternate-reverse;
+    }
+
+    @keyframes glitch-anim-1 {
+      0%, 88%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+      90% { clip-path: inset(15% 0 65% 0); transform: translate(-3px, 1px); }
+      92% { clip-path: inset(60% 0 12% 0); transform: translate(3px, -1px); }
+      94% { clip-path: inset(30% 0 40% 0); transform: translate(-2px, 0); }
+    }
+
+    @keyframes glitch-anim-2 {
+      0%, 91%, 100% { clip-path: inset(0 0 0 0); transform: translate(0); }
+      93% { clip-path: inset(70% 0 5% 0); transform: translate(3px, 1px); }
+      95% { clip-path: inset(10% 0 72% 0); transform: translate(-3px, -2px); }
+      97% { clip-path: inset(45% 0 30% 0); transform: translate(2px, 1px); }
+    }
+
+    /* ==========================================================================
+       СЕКЦИИ-СЦЕНЫ И АДАПТИВНАЯ ВЕРСТКА
+       ========================================================================== */
+    .scene-section {
+      position: relative;
+      z-index: 10;
+      min-height: 100vh;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 6rem 1.25rem 5rem;
+    }
+
+    @media (min-width: 768px) {
+      .scene-section {
+        padding: 6rem 4rem 4rem;
+      }
+    }
+
+    /* 3D-Tilt карточки симптомов */
+    .tilt-card {
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+    .tilt-card-inner {
+      transform: translateZ(20px);
+    }
+
+    /* Кастомный ползунок рентген-сканера */
+    .xray-wrapper {
+      position: relative;
+      user-select: none;
+      touch-action: none;
+      overflow: hidden;
+      border-radius: 12px;
+    }
+    .xray-divider-line {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 2px;
+      background: #00f3ff;
+      box-shadow: 0 0 12px #00f3ff, 0 0 24px #00f3ff;
+      pointer-events: none;
+      z-index: 20;
+    }
+    .xray-handle {
+      position: absolute;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: 38px;
+      height: 38px;
+      border-radius: 9999px;
+      background: rgba(4, 8, 18, 0.9);
+      border: 2px solid #00f3ff;
+      box-shadow: 0 0 16px rgba(0, 243, 255, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #00f3ff;
+      font-size: 12px;
+      pointer-events: none;
+      z-index: 21;
+    }
+
+    /* Пульсирующий индикатор биометрии */
+    @keyframes pulse-dot {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.45); opacity: 0.45; }
+    }
+    .animate-pulse-dot {
+      animation: pulse-dot 1.5s infinite ease-in-out;
+    }
+
+    /* Неоновая кнопка удержания выдоха */
+    .exhale-btn {
+      background: linear-gradient(135deg, rgba(0, 243, 255, 0.16), rgba(0, 140, 255, 0.24));
+      border: 1px solid rgba(0, 243, 255, 0.6);
+      box-shadow: 0 0 24px rgba(0, 243, 255, 0.25);
+      transition: all 0.2s ease;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .exhale-btn:active, .exhale-btn.is-active {
+      background: linear-gradient(135deg, rgba(255, 59, 29, 0.35), rgba(255, 107, 0, 0.45));
+      border-color: #ff6b00;
+      box-shadow: 0 0 34px rgba(255, 59, 29, 0.6);
+      transform: scale(0.97);
+    }
+
+    /* Парящие 3D-карточки терапии в Сцене 5 */
+    @keyframes float-slow {
+      0%, 100% { transform: translateY(0px); }
+      50% { transform: translateY(-7px); }
+    }
+    .therapy-float-1 { animation: float-slow 4.2s ease-in-out infinite; }
+    .therapy-float-2 { animation: float-slow 4.8s ease-in-out 0.6s infinite; }
+    .therapy-float-3 { animation: float-slow 4.5s ease-in-out 1.2s infinite; }
+    .therapy-float-4 { animation: float-slow 5.1s ease-in-out 1.8s infinite; }
+  </style>
+</head>
+<body>
+
+  <!-- ==========================================================================
+       3D-ХОЛСТ (THREE.JS) И СЕТКА СКАНЕРА
+       ========================================================================== -->
+  <div id="webgl-container"></div>
+  <div class="hud-grid-overlay"></div>
+
+  <!-- ==========================================================================
+       ВЕРХНИЙ ТАКТИЧЕСКИЙ HUD-БАР (ТЕЛЕМЕТРИЯ В РЕАЛЬНОМ ВРЕМЕНИ)
+       ========================================================================== -->
+  <header class="fixed top-0 left-0 right-0 z-40 px-4 py-3 md:px-8 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
+    <!-- Логотип системы -->
+    <div class="glass-panel px-3.5 py-2 flex items-center gap-3 pointer-events-auto">
+      <span id="status-led" class="w-2.5 h-2.5 rounded-full bg-[#00f3ff] shadow-[0_0_10px_#00f3ff] animate-pulse-dot"></span>
+      <div>
+        <div class="font-display text-xs md:text-sm font-bold tracking-wider text-white">
+          MED-SCAN <span class="text-[#00f3ff]">OS 4.2</span>
+        </div>
+        <div id="hud-mode-label" class="font-mono-tech text-[10px] text-cyan-300/80 uppercase tracking-widest">
+          РЕЖИМ: ОБЗОРНЫЙ СКАН
+        </div>
+      </div>
+    </div>
+
+    <!-- Биометрическая телеметрия пациента -->
+    <div class="glass-panel px-4 py-2 flex items-center gap-4 md:gap-6 pointer-events-auto font-mono-tech text-xs">
+      <div class="flex flex-col">
+        <span class="text-[10px] text-slate-400">ЧСС / BPM</span>
+        <span id="telemetry-bpm" class="text-sm font-bold text-[#00f3ff]">74 <span class="text-[10px] font-normal">уд/м</span></span>
+      </div>
+      <div class="h-6 w-px bg-cyan-500/20"></div>
+      <div class="flex flex-col">
+        <span class="text-[10px] text-slate-400">САТУРАЦИЯ SpO₂</span>
+        <span id="telemetry-spo2" class="text-sm font-bold text-[#00ff9d]">98%</span>
+      </div>
+      <div class="h-6 w-px bg-cyan-500/20 hidden sm:block"></div>
+      <div class="hidden sm:flex flex-col">
+        <span class="text-[10px] text-slate-400">ТЕМП. ТЕЛА</span>
+        <span id="telemetry-temp" class="text-sm font-bold text-[#00f3ff]">36.6°C</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       БОКОВОЙ / НИЖНИЙ НАВИГАТОР ПО 5 СЦЕНАМ И ИНДИКАТОР ПРОГРЕССА
+       ========================================================================== -->
+  <nav aria-label="Навигация по сценам" class="fixed right-3 md:right-6 top-1/2 -translate-y-1/2 z-40 hidden lg:flex flex-col items-end gap-3">
+    <div class="glass-panel p-2.5 flex flex-col gap-2">
+      <button onclick="scrollToScene(0)" data-nav-idx="0" class="nav-dot group flex items-center justify-end gap-2.5 px-2 py-1.5 rounded-lg text-right transition-all bg-cyan-500/20 border border-cyan-400/50">
+        <span class="font-mono-tech text-[11px] text-cyan-200 group-hover:text-white">01 // ВДОХ</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-[#00f3ff] shadow-[0_0_8px_#00f3ff]"></span>
+      </button>
+      <button onclick="scrollToScene(1)" data-nav-idx="1" class="nav-dot group flex items-center justify-end gap-2.5 px-2 py-1.5 rounded-lg text-right transition-all hover:bg-white/5 border border-transparent">
+        <span class="font-mono-tech text-[11px] text-slate-400 group-hover:text-white">02 // ВОСПАЛЕНИЕ</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+      </button>
+      <button onclick="scrollToScene(2)" data-nav-idx="2" class="nav-dot group flex items-center justify-end gap-2.5 px-2 py-1.5 rounded-lg text-right transition-all hover:bg-white/5 border border-transparent">
+        <span class="font-mono-tech text-[11px] text-slate-400 group-hover:text-white">03 // ДИАГНОСТИКА</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+      </button>
+      <button onclick="scrollToScene(3)" data-nav-idx="3" class="nav-dot group flex items-center justify-end gap-2.5 px-2 py-1.5 rounded-lg text-right transition-all hover:bg-white/5 border border-transparent">
+        <span class="font-mono-tech text-[11px] text-slate-400 group-hover:text-white">04 // СПИРОМЕТРИЯ</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+      </button>
+      <button onclick="scrollToScene(4)" data-nav-idx="4" class="nav-dot group flex items-center justify-end gap-2.5 px-2 py-1.5 rounded-lg text-right transition-all hover:bg-white/5 border border-transparent">
+        <span class="font-mono-tech text-[11px] text-slate-400 group-hover:text-white">05 // ТЕРАПИЯ</span>
+        <span class="w-2.5 h-2.5 rounded-full bg-slate-600"></span>
+      </button>
+    </div>
+
+    <!-- Вертикальная шкала глубины погружения -->
+    <div class="glass-panel px-2.5 py-3 flex flex-col items-center gap-1.5 font-mono-tech text-[10px] text-cyan-400">
+      <span>ГЛУБИНА</span>
+      <div class="w-1.5 h-24 bg-slate-800 rounded-full overflow-hidden">
+        <div id="scan-progress-bar" class="w-full h-1/5 bg-gradient-to-b from-[#00f3ff] to-[#00ff9d] transition-all duration-300"></div>
+      </div>
+      <span id="scan-depth-val">0%</span>
+    </div>
+  </nav>
+
+  <!-- Мобильный нижний навигатор (для экранов < lg) -->
+  <nav class="fixed bottom-3 left-3 right-3 z-40 lg:hidden flex justify-center">
+    <div class="glass-panel px-2 py-1.5 flex items-center justify-between gap-1 w-full max-w-md font-mono-tech text-[10px]">
+      <button onclick="scrollToScene(0)" data-mob-idx="0" class="mob-nav-btn flex-1 py-1.5 rounded-lg bg-cyan-500/25 text-cyan-200 font-bold">01.ВДОХ</button>
+      <button onclick="scrollToScene(1)" data-mob-idx="1" class="mob-nav-btn flex-1 py-1.5 rounded-lg text-slate-400">02.ОЧАГ</button>
+      <button onclick="scrollToScene(2)" data-mob-idx="2" class="mob-nav-btn flex-1 py-1.5 rounded-lg text-slate-400">03.HUD</button>
+      <button onclick="scrollToScene(3)" data-mob-idx="3" class="mob-nav-btn flex-1 py-1.5 rounded-lg text-slate-400">04.СПИРО</button>
+      <button onclick="scrollToScene(4)" data-mob-idx="4" class="mob-nav-btn flex-1 py-1.5 rounded-lg text-slate-400">05.КУРС</button>
+    </div>
+  </nav>
+
+  <!-- ==========================================================================
+       ОСНОВНОЙ КОНТЕНТ ПРЕЗЕНТАЦИИ (5 ИНТЕРАКТИВНЫХ СЦЕН)
+       ========================================================================== -->
+  <main id="presentation-root">
+
+    <!-- ========================================================================
+         SCENE 1: ИНТРО (ВДОХ)
+         ======================================================================== -->
+    <section id="scene-1" class="scene-section">
+      <div class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div id="hero-parallax-box" class="lg:col-span-7 space-y-6">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-400/30 font-mono-tech text-xs text-[#00f3ff]">
+            <span class="w-2 h-2 rounded-full bg-[#00f3ff]"></span>
+            <span>ПРОТОКОЛ ПУЛЬМОНОЛОГИЧЕСКОГО СКАНИРОВАНИЯ // J20–J40</span>
+          </div>
+
+          <h1 class="font-display text-3xl sm:text-5xl lg:text-6xl font-black tracking-tight leading-tight text-white glitch-title" data-text="Бронхит: Погружение в диагностику">
+            Бронхит: Погружение в диагностику
+          </h1>
+
+          <p class="text-slate-300 text-base sm:text-lg max-w-2xl leading-relaxed">
+            Интерактивная 3D-визуализация респираторного тракта в реальном времени. Исследуйте патогенез воспаления слизистой бронхов, проведите мультимодальную диагностику и оцените функциональный резерв легких.
+          </p>
+
+          <!-- Карточка-подсказка по интерактивам -->
+          <div class="glass-panel hud-corners p-4 max-w-xl flex flex-wrap items-center justify-between gap-4">
+            <div class="space-y-1">
+              <div class="font-mono-tech text-xs text-cyan-300">СТАТУС 3D-МОДЕЛИ: АКТИВНЫЙ РЕСПИРАТОРНЫЙ ЦИКЛ</div>
+              <div class="text-xs text-slate-400">Перемещайте курсор для параллакс-обзора бронхиального дерева или запустите погружение.</div>
+            </div>
+            <button onclick="scrollToScene(1)" class="px-6 py-3 rounded-xl font-display text-xs sm:text-sm font-bold tracking-wider uppercase bg-gradient-to-r from-[#00f3ff] to-[#00b8ff] text-[#040812] shadow-[0_0_25px_rgba(0,243,255,0.5)] hover:shadow-[0_0_36px_rgba(0,243,255,0.85)] hover:scale-[1.03] active:scale-[0.98] transition-all cursor-pointer">
+              Начать сканирование →
+            </button>
+          </div>
+        </div>
+
+        <!-- Правая колонка оставлена полупрозрачной, чтобы 3D-легкие были в центре внимания -->
+        <div class="lg:col-span-5 flex flex-col items-end justify-end">
+          <div class="glass-panel p-4 w-full max-w-xs font-mono-tech text-xs space-y-2.5 border-cyan-500/30">
+            <div class="flex justify-between text-cyan-300 border-b border-cyan-500/20 pb-1.5">
+              <span>АНАТОМИЧЕСКИЙ УЗЕЛ</span>
+              <span>ТРАХЕЯ → БРОНХИОЛЫ</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Дыхательный объем:</span>
+              <span class="text-white">500 мл (Норма)</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Просвет бронхов:</span>
+              <span class="text-[#00ff9d]">100% (Свободен)</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Секреция слизи:</span>
+              <span class="text-[#00f3ff]">Физиологическая</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================
+         SCENE 2: ЭПИЦЕНТР ВОСПАЛЕНИЯ (АНАТОМИЯ)
+         ======================================================================== -->
+    <section id="scene-2" class="scene-section">
+      <div class="max-w-6xl mx-auto w-full space-y-8">
+        <!-- Верхняя панель управления состоянием бронхов -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div class="space-y-2">
+            <div class="font-mono-tech text-xs text-[#ff6b00] tracking-widest uppercase">
+              ЭТАП 02 // МИКРОСКОПИЧЕСКОЕ ПОГРУЖЕНИЕ В БРОНХИАЛЬНОЕ ДЕРЕВО
+            </div>
+            <h2 class="font-display text-2xl sm:text-4xl font-bold text-white">
+              Эпицентр воспаления слизистой
+            </h2>
+            <p class="text-slate-300 text-sm sm:text-base max-w-2xl">
+              При остром бронхите вирусная или бактериальная атака вызывает гиперемию, отек слизистой оболочки, гиперсекрецию вязкой слизи и спазм гладкой мускулатуры бронхов.
+            </p>
+          </div>
+
+          <!-- Переключатель Норма / Воспаление для сравнения в реальном времени -->
+          <div class="glass-panel p-1.5 flex items-center gap-1 self-start md:self-auto">
+            <button id="btn-state-normal" onclick="setBronchiVisualState('normal')" class="px-3.5 py-2 rounded-xl font-mono-tech text-xs transition-all text-slate-300 hover:text-white cursor-pointer">
+              ● НОРМА (ЦИАН)
+            </button>
+            <button id="btn-state-inflamed" onclick="setBronchiVisualState('inflamed')" class="px-3.5 py-2 rounded-xl font-mono-tech text-xs font-bold transition-all bg-[#ff3b1d]/25 text-[#ff6b00] border border-[#ff3b1d]/60 shadow-[0_0_15px_rgba(255,59,29,0.35)] cursor-pointer">
+              ▲ ВОСПАЛЕНИЕ (ОЧАГ)
+            </button>
+          </div>
+        </div>
+
+        <!-- 3 интерактивные 3D-tilt карточки симптомов -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4">
+          <!-- Симптом 1 -->
+          <div class="tilt-card glass-panel glass-panel-alert hud-corners p-6 cursor-pointer group" data-tilt>
+            <div class="tilt-card-inner space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-md bg-[#ff3b1d]/20 border border-[#ff3b1d]/40 font-mono-tech text-[11px] text-[#ff6b00]">
+                  СИМПТОМ #01
+                </span>
+                <span class="font-mono-tech text-xs text-slate-400 group-hover:text-[#ff6b00] transition-colors">
+                  РЕФЛЕКС // ДИНАМИКА
+                </span>
+              </div>
+              <h3 class="font-display text-xl font-bold text-white group-hover:text-[#ff6b00] transition-colors">
+                Сухой → влажный кашель
+              </h3>
+              <p class="text-sm text-slate-300 leading-relaxed">
+                В первые 2–3 дня надсадный непродуктивный кашель из-за раздражения рецепторов слизистой. Затем подключается гиперсекреция бокаловидных клеток с отделением слизистой или слизисто-гнойной мокроты.
+              </p>
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between font-mono-tech text-xs">
+                <span class="text-slate-400">Отек эпителия:</span>
+                <span class="text-[#ff3b1d] font-bold">+65% ОТ НОРМЫ</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Симптом 2 -->
+          <div class="tilt-card glass-panel glass-panel-alert hud-corners p-6 cursor-pointer group" data-tilt>
+            <div class="tilt-card-inner space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-md bg-[#ff3b1d]/20 border border-[#ff3b1d]/40 font-mono-tech text-[11px] text-[#ff6b00]">
+                  СИМПТОМ #02
+                </span>
+                <span class="font-mono-tech text-xs text-slate-400 group-hover:text-[#ff6b00] transition-colors">
+                  ОБСТРУКЦИЯ // ВЫДОХ
+                </span>
+              </div>
+              <h3 class="font-display text-xl font-bold text-white group-hover:text-[#ff6b00] transition-colors">
+                Экспираторная одышка
+              </h3>
+              <p class="text-sm text-slate-300 leading-relaxed">
+                Сужение просвета средних и мелких бронхов за счет вязкого секрета и бронхоспазма затрудняет фазу выдоха. Появляется ощущение стеснения в груди и дистанционные свистящие хрипы при нагрузке.
+              </p>
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between font-mono-tech text-xs">
+                <span class="text-slate-400">Просвет бронхиол:</span>
+                <span class="text-[#ff6b00] font-bold">СУЖЕН НА 38%</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Симптом 3 -->
+          <div class="tilt-card glass-panel glass-panel-alert hud-corners p-6 cursor-pointer group" data-tilt>
+            <div class="tilt-card-inner space-y-4">
+              <div class="flex items-center justify-between">
+                <span class="px-2.5 py-1 rounded-md bg-[#ff3b1d]/20 border border-[#ff3b1d]/40 font-mono-tech text-[11px] text-[#ff6b00]">
+                  СИМПТОМ #03
+                </span>
+                <span class="font-mono-tech text-xs text-slate-400 group-hover:text-[#ff6b00] transition-colors">
+                  ИНТОКСИКАЦИЯ // ПИРОГЕНЫ
+                </span>
+              </div>
+              <h3 class="font-display text-xl font-bold text-white group-hover:text-[#ff6b00] transition-colors">
+                Субфебрильная температура
+              </h3>
+              <p class="text-sm text-slate-300 leading-relaxed">
+                Выброс провоспалительных цитокинов (IL-1, IL-6, TNF-α) запускает системную реакцию: температура 37.3–38.2°C, ломота в мышцах, выраженная астения и потливость в первые сутки заболевания.
+              </p>
+              <div class="pt-2 border-t border-white/10 flex items-center justify-between font-mono-tech text-xs">
+                <span class="text-slate-400">Термометрия:</span>
+                <span class="text-[#ff3b1d] font-bold">37.8°C (СУБФЕБРИЛИТЕТ)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================
+         SCENE 3: ДИАГНОСТИЧЕСКИЙ HUD-ИНТЕРФЕЙС
+         ======================================================================== -->
+    <section id="scene-3" class="scene-section">
+      <div class="max-w-7xl mx-auto w-full space-y-6">
+        <div class="space-y-1.5">
+          <div class="font-mono-tech text-xs text-[#00f3ff] tracking-widest uppercase">
+            ЭТАП 03 // МУЛЬТИМОДАЛЬНЫЙ ДИАГНОСТИЧЕСКИЙ ТЕРМИНАЛ
+          </div>
+          <h2 class="font-display text-2xl sm:text-4xl font-bold text-white">
+            Диагностический HUD-интерфейс врача
+          </h2>
+        </div>
+
+        <!-- Сетка из 3 интерактивных диагностических модулей -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          <!-- МОДУЛЬ 1: АУСКУЛЬТАЦИЯ (ЗВУКОВАЯ ВОЛНА + WEB AUDIO API) -->
+          <div class="glass-panel hud-corners p-5 flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-display text-sm font-bold text-[#00f3ff] tracking-wide">01. АУСКУЛЬТАЦИЯ</span>
+                <span id="ausc-badge" class="px-2 py-0.5 rounded bg-[#ff3b1d]/20 border border-[#ff3b1d]/50 font-mono-tech text-[10px] text-[#ff6b00]">
+                  СУХИЕ ХРИПЫ
+                </span>
+              </div>
+
+              <!-- Живой осциллограф дыхательных шумов -->
+              <div class="relative rounded-xl overflow-hidden bg-[#02060e] border border-cyan-500/25 h-44">
+                <canvas id="auscultation-canvas" class="w-full h-full block"></canvas>
+                <div class="absolute top-2 left-2.5 font-mono-tech text-[10px] text-slate-400">
+                  FREQ: <span id="ausc-freq-label" class="text-[#ff6b00]">420–850 Гц (Свистящие)</span>
+                </div>
+              </div>
+
+              <p id="ausc-desc" class="text-xs text-slate-300 leading-relaxed">
+                Жесткое дыхание с удлиненным выдохом; выслушиваются рассеянные сухие свистящие и жужжащие хрипы, меняющие тембр после откашливания.
+              </p>
+            </div>
+
+            <div class="space-y-2 pt-2 border-t border-white/10">
+              <div class="grid grid-cols-2 gap-2 font-mono-tech text-[11px]">
+                <button id="btn-ausc-normal" onclick="setAuscultationMode('normal')" class="py-2 px-2 rounded-lg border border-slate-700 text-slate-300 hover:border-cyan-400 transition-all cursor-pointer">
+                  Везикулярное (Норма)
+                </button>
+                <button id="btn-ausc-bronchitis" onclick="setAuscultationMode('bronchitis')" class="py-2 px-2 rounded-lg border border-[#ff6b00] bg-[#ff3b1d]/20 text-white font-bold transition-all cursor-pointer">
+                  Хрипы (Бронхит)
+                </button>
+              </div>
+              <button id="btn-audio-toggle" onclick="toggleAuscultationAudio()" class="w-full py-2.5 rounded-xl font-mono-tech text-xs font-bold bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/50 text-[#00f3ff] flex items-center justify-center gap-2 transition-all cursor-pointer">
+                <span id="audio-icon">🔊</span>
+                <span id="audio-btn-text">ПРОСЛУШАТЬ СТЕТОСКОП (ЗВУК)</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- МОДУЛЬ 2: РЕНТГЕН-СКАНЕР (ИНТЕРАКТИВНЫЙ СЛАЙДЕР ДО/ПОСЛЕ) -->
+          <div class="glass-panel hud-corners p-5 flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-display text-sm font-bold text-[#00f3ff] tracking-wide">02. РЕНТГЕН-СКАНЕР</span>
+                <span class="font-mono-tech text-[10px] text-cyan-300">ОГК // ПРЯМАЯ ПРОЕКЦИЯ</span>
+              </div>
+
+              <!-- Интерактивный контейнер сравнения рентгенограммы -->
+              <div id="xray-container" class="xray-wrapper h-44 bg-[#02050c] border border-cyan-500/25 cursor-ew-resize">
+                <!-- Слой 1 (Фон): Рентген при остром бронхите с усилением прикорневого рисунка -->
+                <svg viewBox="0 0 360 200" class="w-full h-full block" preserveAspectRatio="none">
+                  <defs>
+                    <radialGradient id="inflamGlowLeft" cx="38%" cy="52%" r="28%">
+                      <stop offset="0%" stop-color="#ff3b1d" stop-opacity="0.72" />
+                      <stop offset="60%" stop-color="#ff6b00" stop-opacity="0.28" />
+                      <stop offset="100%" stop-color="#ff3b1d" stop-opacity="0" />
+                    </radialGradient>
+                    <radialGradient id="inflamGlowRight" cx="62%" cy="52%" r="28%">
+                      <stop offset="0%" stop-color="#ff3b1d" stop-opacity="0.72" />
+                      <stop offset="60%" stop-color="#ff6b00" stop-opacity="0.28" />
+                      <stop offset="100%" stop-color="#ff3b1d" stop-opacity="0" />
+                    </radialGradient>
+                  </defs>
+                  <rect width="360" height="200" fill="#060c18" />
+                  <!-- Контур грудной клетки -->
+                  <path d="M180,18 C115,22 72,72 68,175 L292,175 C288,72 245,22 180,18 Z" fill="#0d1b30" stroke="#1e3a5f" stroke-width="2" />
+                  <!-- Позвоночник -->
+                  <rect x="174" y="16" width="12" height="164" rx="3" fill="#23456e" opacity="0.75" />
+                  <!-- Ребра -->
+                  <g stroke="#2c5685" stroke-width="3.5" fill="none" opacity="0.65">
+                    <path d="M174,42 Q125,44 96,68" />
+                    <path d="M186,42 Q235,44 264,68" />
+                    <path d="M174,68 Q118,72 84,102" />
+                    <path d="M186,68 Q242,72 276,102" />
+                    <path d="M174,96 Q114,102 78,136" />
+                    <path d="M186,96 Q246,102 282,136" />
+                    <path d="M174,124 Q118,132 82,164" />
+                    <path d="M186,124 Q242,132 278,164" />
+                  </g>
+                  <!-- Очаги перибронхиальной инфильтрации и усиления корней -->
+                  <circle cx="136" cy="105" r="52" fill="url(#inflamGlowLeft)" />
+                  <circle cx="224" cy="105" r="52" fill="url(#inflamGlowRight)" />
+                  <!-- Утолщенные стенки бронхов ("трамвайные рельсы") -->
+                  <g stroke="#ff6b00" stroke-width="2.2" fill="none" opacity="0.9">
+                    <path d="M175,65 L145,95 L122,125 M145,95 L132,138" />
+                    <path d="M185,65 L215,95 L238,125 M215,95 L228,138" />
+                  </g>
+                  <text x="252" y="24" fill="#ff6b00" font-family="JetBrains Mono" font-size="9" font-weight="bold">БРОНХИТ (ОЧАГ)</text>
+                </svg>
+
+                <!-- Слой 2 (Поверх, обрезается по X ползунка): Чистая рентгенограмма нормы -->
+                <div id="xray-normal-layer" class="absolute inset-0 overflow-hidden" style="width: 50%;">
+                  <svg viewBox="0 0 360 200" class="w-full h-full block" style="width: 100%; min-width: 100%;" preserveAspectRatio="none">
+                    <rect width="360" height="200" fill="#040b16" />
+                    <path d="M180,18 C115,22 72,72 68,175 L292,175 C288,72 245,22 180,18 Z" fill="#09192c" stroke="#00f3ff" stroke-opacity="0.35" stroke-width="2" />
+                    <rect x="174" y="16" width="12" height="164" rx="3" fill="#18496b" opacity="0.8" />
+                    <g stroke="#00f3ff" stroke-opacity="0.35" stroke-width="3.5" fill="none">
+                      <path d="M174,42 Q125,44 96,68" />
+                      <path d="M186,42 Q235,44 264,68" />
+                      <path d="M174,68 Q118,72 84,102" />
+                      <path d="M186,68 Q242,72 276,102" />
+                      <path d="M174,96 Q114,102 78,136" />
+                      <path d="M186,96 Q246,102 282,136" />
+                      <path d="M174,124 Q118,132 82,164" />
+                      <path d="M186,124 Q242,132 278,164" />
+                    </g>
+                    <!-- Тонкие нежные бронхи в норме -->
+                    <g stroke="#00f3ff" stroke-width="1.3" fill="none" opacity="0.65">
+                      <path d="M175,65 L145,95 L122,125 M145,95 L132,138" />
+                      <path d="M185,65 L215,95 L238,125 M215,95 L228,138" />
+                    </g>
+                    <text x="14" y="24" fill="#00f3ff" font-family="JetBrains Mono" font-size="9" font-weight="bold">НОРМА (ЧИСТО)</text>
+                  </svg>
+                </div>
+
+                <!-- Вертикальный лазерный луч слайдера -->
+                <div id="xray-line" class="xray-divider-line" style="left: 50%;"></div>
+                <div id="xray-handle" class="xray-handle" style="left: 50%;">⇄</div>
+              </div>
+
+              <p class="text-xs text-slate-300 leading-relaxed">
+                Потяните ползунок сканера: слева — прозрачные легочные поля, справа — усиление прикорневого рисунка и перибронхиальная инфильтрация без очаговой пневмонии.
+              </p>
+            </div>
+
+            <div class="pt-2 border-t border-white/10 flex items-center justify-between font-mono-tech text-[11px]">
+              <span class="text-slate-400">Инфильтрация паренхимы:</span>
+              <span class="text-[#00ff9d]">ОТСУТСТВУЕТ (Пневмония искл.)</span>
+            </div>
+          </div>
+
+          <!-- МОДУЛЬ 3: ЛАБОРАТОРИЯ (БИОМАРКЕРЫ КРОВИ) -->
+          <div class="glass-panel hud-corners p-5 flex flex-col justify-between space-y-4">
+            <div class="space-y-3">
+              <div class="flex items-center justify-between">
+                <span class="font-display text-sm font-bold text-[#00f3ff] tracking-wide">03. ЛАБОРАТОРИЯ</span>
+                <span id="lab-status-tag" class="font-mono-tech text-[10px] text-cyan-300">ГЕМАТОЛОГИЯ // ОАК + Б/Х</span>
+              </div>
+
+              <!-- Анимированные показатели крови -->
+              <div class="space-y-2.5 bg-[#02060e]/90 p-3.5 rounded-xl border border-cyan-500/20 font-mono-tech text-xs">
+                <!-- Маркер 1: CRP -->
+                <div class="space-y-1">
+                  <div class="flex justify-between">
+                    <span class="text-slate-300">С-реактивный белок (CRP)</span>
+                    <span id="val-crp" class="text-[#ff6b00] font-bold">24.8 мг/л</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="bar-crp" class="h-full bg-gradient-to-r from-[#ff6b00] to-[#ff3b1d] transition-all duration-700" style="width: 72%;"></div>
+                  </div>
+                  <div class="text-[10px] text-slate-500 flex justify-between">
+                    <span>Референс: 0.0 – 5.0 мг/л</span>
+                    <span class="text-[#ff6b00]">УМЕРЕННОЕ ВОСПАЛЕНИЕ</span>
+                  </div>
+                </div>
+
+                <!-- Маркер 2: WBC -->
+                <div class="space-y-1 pt-1">
+                  <div class="flex justify-between">
+                    <span class="text-slate-300">Лейкоциты (WBC)</span>
+                    <span id="val-wbc" class="text-[#ff6b00] font-bold">11.4 ×10⁹/л</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="bar-wbc" class="h-full bg-gradient-to-r from-amber-400 to-[#ff6b00] transition-all duration-700" style="width: 64%;"></div>
+                  </div>
+                  <div class="text-[10px] text-slate-500 flex justify-between">
+                    <span>Референс: 4.0 – 9.0 ×10⁹/л</span>
+                    <span class="text-amber-400">ЛЕГКИЙ ЛЕЙКОЦИТОЗ</span>
+                  </div>
+                </div>
+
+                <!-- Маркер 3: Прокальцитонин -->
+                <div class="space-y-1 pt-1">
+                  <div class="flex justify-between">
+                    <span class="text-slate-300">Прокальцитонин (PCT)</span>
+                    <span id="val-pct" class="text-[#00ff9d] font-bold">0.08 нг/мл</span>
+                  </div>
+                  <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                    <div id="bar-pct" class="h-full bg-[#00ff9d] transition-all duration-700" style="width: 18%;"></div>
+                  </div>
+                  <div class="text-[10px] text-slate-500 flex justify-between">
+                    <span>Референс: &lt; 0.25 нг/мл</span>
+                    <span class="text-[#00ff9d]">ВИРУСНАЯ ЭТИОЛОГИЯ</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Бегущая строка терминала -->
+              <div id="lab-terminal-log" class="font-mono-tech text-[11px] text-cyan-300/90 bg-cyan-950/30 border border-cyan-500/20 rounded-lg px-3 py-2 truncate">
+                &gt; ЗАКЛЮЧЕНИЕ: Вирусный бронхит. Антибиотики не показаны.
+              </div>
+            </div>
+
+            <button onclick="runLabReScan()" class="w-full py-2.5 rounded-xl font-mono-tech text-xs font-bold bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/50 text-[#00f3ff] transition-all cursor-pointer">
+              ↻ ПОВТОРИТЬ ЭКСПРЕСС-АНАЛИЗ КРОВИ
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================
+         SCENE 4: ИНТЕРАКТИВНАЯ СПИРОМЕТРИЯ (ПОТОК – ОБЪЕМ / ОФВ1)
+         ======================================================================== -->
+    <section id="scene-4" class="scene-section">
+      <div class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+        <!-- Левая колонка: Живой график спирометрии -->
+        <div class="lg:col-span-7 glass-panel hud-corners p-5 sm:p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div class="font-mono-tech text-xs text-[#00f3ff] uppercase">ЭТАП 04 // ФУНКЦИЯ ВНЕШНЕГО ДЫХАНИЯ</div>
+              <h2 class="font-display text-xl sm:text-3xl font-bold text-white">Интерактивная спирометрия</h2>
+            </div>
+            <div class="flex items-center gap-4 font-mono-tech text-[11px]">
+              <span class="flex items-center gap-1.5 text-[#00f3ff]">
+                <span class="w-3 h-0.5 bg-[#00f3ff] inline-block"></span> Норма
+              </span>
+              <span class="flex items-center gap-1.5 text-[#ff6b00]">
+                <span class="w-3 h-0.5 bg-[#ff6b00] inline-block"></span> Бронхит (Обструкция)
+              </span>
+            </div>
+          </div>
+
+          <!-- Canvas кривой Поток-Объем -->
+          <div class="relative rounded-xl overflow-hidden bg-[#02060f] border border-cyan-500/25 h-64 sm:h-72">
+            <canvas id="spirometry-canvas" class="w-full h-full block"></canvas>
+            <div id="spiro-hint-overlay" class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span class="px-3.5 py-1.5 rounded-full bg-black/70 border border-cyan-400/40 font-mono-tech text-xs text-cyan-200">
+                Нажмите и удерживайте кнопку ВЫДОХ ниже ↓
+              </span>
+            </div>
+          </div>
+
+          <!-- Кнопка удержания выдоха -->
+          <div class="flex flex-col sm:flex-row items-center gap-4">
+            <button
+              id="btn-exhale"
+              class="exhale-btn w-full sm:w-auto flex-1 py-4 px-6 rounded-xl font-display text-sm font-bold tracking-wider text-white uppercase cursor-pointer flex items-center justify-center gap-3"
+            >
+              <span class="w-3 h-3 rounded-full bg-[#00f3ff] animate-ping"></span>
+              <span>УДЕРЖИВАЙТЕ: ВЫДОХ (EXHALE)</span>
+            </button>
+            <button onclick="resetSpirometry()" class="w-full sm:w-auto py-4 px-4 rounded-xl font-mono-tech text-xs border border-slate-700 text-slate-300 hover:border-cyan-400 hover:text-white transition-all cursor-pointer">
+              СБРОС
+            </button>
+          </div>
+        </div>
+
+        <!-- Правая колонка: Показатели ОФВ1, ФЖЕЛ и Индекс Тиффно -->
+        <div class="lg:col-span-5 space-y-4">
+          <div class="glass-panel p-5 space-y-4">
+            <div class="font-mono-tech text-xs text-cyan-300 border-b border-white/10 pb-2">
+              ТЕЛЕМЕТРИЯ ФОРСИРОВАННОГО ВЫДОХА
+            </div>
+
+            <div class="grid grid-cols-2 gap-3 font-mono-tech">
+              <div class="p-3 rounded-xl bg-black/40 border border-white/10">
+                <div class="text-[10px] text-slate-400">ОФВ₁ (За 1-ю сек)</div>
+                <div id="spiro-fev1" class="text-xl font-bold text-[#ff6b00] mt-1">0.00 л</div>
+                <div class="text-[10px] text-slate-500">Норма: 3.85 л</div>
+              </div>
+              <div class="p-3 rounded-xl bg-black/40 border border-white/10">
+                <div class="text-[10px] text-slate-400">ФЖЕЛ (Общий объем)</div>
+                <div id="spiro-fvc" class="text-xl font-bold text-[#00f3ff] mt-1">0.00 л</div>
+                <div class="text-[10px] text-slate-500">Норма: 4.60 л</div>
+              </div>
+            </div>
+
+            <div class="p-3.5 rounded-xl bg-[#ff3b1d]/10 border border-[#ff3b1d]/30 font-mono-tech">
+              <div class="flex justify-between items-center">
+                <span class="text-xs text-slate-300">Индекс Тиффно (ОФВ₁/ФЖЕЛ):</span>
+                <span id="spiro-tiffeneau" class="text-base font-bold text-[#ff6b00]">— %</span>
+              </div>
+              <p id="spiro-verdict" class="text-[11px] text-slate-300 mt-2 font-sans leading-relaxed">
+                Удерживайте кнопку выдоха, чтобы зафиксировать характерный «прогиб» нисходящего колена кривой Поток–Объем, указывающий на бронхиальную обструкцию.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================================================
+         SCENE 5: ВЕРДИКТ И ЛЕЧЕНИЕ (РЕГЕНЕРАЦИЯ)
+         ======================================================================== -->
+    <section id="scene-5" class="scene-section">
+      <div class="max-w-6xl mx-auto w-full space-y-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div class="space-y-2">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#00ff9d]/15 border border-[#00ff9d]/40 font-mono-tech text-xs text-[#00ff9d]">
+              <span>ЭТАП 05 // ПРОТОКОЛ ВОССТАНОВЛЕНИЯ И ТЕРАПИИ</span>
+            </div>
+            <h2 class="font-display text-2xl sm:text-4xl font-bold text-white">
+              Вердикт и таргетная терапия
+            </h2>
+            <p class="text-slate-300 text-sm sm:text-base max-w-2xl">
+              Воспаление купируется, мукоцилиарный клиренс восстанавливается. Выберите терапевтический модуль ниже, чтобы активировать протокол воздействия на респираторный тракт.
+            </p>
+          </div>
+
+          <button onclick="scrollToScene(0)" class="self-start md:self-auto px-4 py-2.5 rounded-xl font-mono-tech text-xs border border-[#00ff9d]/50 text-[#00ff9d] hover:bg-[#00ff9d]/15 transition-all cursor-pointer">
+            ↑ ВЕРНУТЬСЯ К НАЧАЛУ СКАНА
+          </button>
+        </div>
+
+        <!-- 4 парящие 3D-кнопки/карточки методов лечения -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <button onclick="selectTherapy(0)" id="therapy-card-0" class="therapy-float-1 glass-panel p-5 text-left border-[#00ff9d]/60 bg-[#00ff9d]/10 cursor-pointer transition-all">
+            <div class="font-mono-tech text-[11px] text-[#00ff9d] mb-2">МОДУЛЬ 01 // ДРЕНАЖ</div>
+            <h3 class="font-display text-base font-bold text-white mb-2">Муколитики и отхаркивающие</h3>
+            <p class="text-xs text-slate-300">Снижение вязкости мокроты и стимуляция реснитчатого эпителия.</p>
+          </button>
+
+          <button onclick="selectTherapy(1)" id="therapy-card-1" class="therapy-float-2 glass-panel p-5 text-left cursor-pointer transition-all">
+            <div class="font-mono-tech text-[11px] text-[#00f3ff] mb-2">МОДУЛЬ 02 // ПРОСВЕТ</div>
+            <h3 class="font-display text-base font-bold text-white mb-2">Бронходилататоры</h3>
+            <p class="text-xs text-slate-300">Купирование бронхоспазма и облегчение выдоха при обструкции.</p>
+          </button>
+
+          <button onclick="selectTherapy(2)" id="therapy-card-2" class="therapy-float-3 glass-panel p-5 text-left cursor-pointer transition-all">
+            <div class="font-mono-tech text-[11px] text-[#00f3ff] mb-2">МОДУЛЬ 03 // СЛИЗИСТАЯ</div>
+            <h3 class="font-display text-base font-bold text-white mb-2">Увлажнение и ингаляции</h3>
+            <p class="text-xs text-slate-300">Обильное теплое питье и небулайзерная терапия изотоническим раствором.</p>
+          </button>
+
+          <button onclick="selectTherapy(3)" id="therapy-card-3" class="therapy-float-4 glass-panel p-5 text-left cursor-pointer transition-all">
+            <div class="font-mono-tech text-[11px] text-[#00f3ff] mb-2">МОДУЛЬ 04 // КОНТРОЛЬ</div>
+            <h3 class="font-display text-base font-bold text-white mb-2">Этиотропный подход</h3>
+            <p class="text-xs text-slate-300">Противовирусная поддержка; антибиотики строго при бактериальной инфекции.</p>
+          </button>
+        </div>
+
+        <!-- Подробная карточка выбранного протокола лечения -->
+        <div id="therapy-detail-panel" class="glass-panel hud-corners p-6 border-[#00ff9d]/40">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="space-y-2 max-w-3xl">
+              <div id="therapy-detail-tag" class="font-mono-tech text-xs text-[#00ff9d] uppercase">
+                АКТИВНЫЙ ПРОТОКОЛ: МУКОЛИТИЧЕСКАЯ ТЕРАПИЯ (АМБРОКСОЛ / АЦЕТИЛЦИСТЕИН)
+              </div>
+              <h4 id="therapy-detail-title" class="font-display text-xl font-bold text-white">
+                Разжижение секрета и восстановление мукоцилиарного клиренса
+              </h4>
+              <p id="therapy-detail-desc" class="text-sm text-slate-300 leading-relaxed">
+                Разрывает дисульфидные связи мукополисахаридов мокроты, уменьшая ее адгезию к стенкам бронхов. Усиливает синтез сурфактанта и ускоряет эвакуацию слизи из бронхиол.
+              </p>
+            </div>
+            <div class="glass-panel px-4 py-3 font-mono-tech text-xs text-[#00ff9d] shrink-0">
+              <div>ЭФФЕКТ НА 3D-МОДЕЛИ:</div>
+              <div id="therapy-detail-effect" class="font-bold text-white mt-1">Очищение просвета +94%</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================================================
+       JAVASCRIPT: THREE.JS 3D-ЛЕГКИЕ, GSAP SCROLLTRIGGER, WEB AUDIO И ИНТЕРАКТИВЫ
+       ========================================================================== -->
+  <script>
+    // =========================================================================
+    // 1. ИНИЦИАЛИЗАЦИЯ THREE.JS (ПРОЦЕДУРНЫЕ 3D-ЛЕГКИЕ И БРОНХИАЛЬНОЕ ДЕРЕВО)
+    // =========================================================================
+    let scene, camera, renderer;
+    let lungsGroup, leftLungMesh, rightLungMesh, bronchiGroup, mucusParticles;
+    let bronchiMaterials = [];
+    let lungWireMaterial, mucusMaterial;
+
+    // Параметры для плавного GSAP-морфинга цвета и состояния 3D-сцены
+    const visualParams = {
+      inflammation: 0.0, // 0 = норма (циан), 1 = острое воспаление (оранжево-красный), -1 = био-зеленый (лечение)
+      breathAmp: 0.045,
+      exhaleCompression: 0.0,
+      mucusOpacity: 0.05
+    };
+
+    // Цветовые константы палитры
+    const COLOR_CYAN = new THREE.Color(0x00f3ff);
+    const COLOR_INFLAMED = new THREE.Color(0xff3b1d);
+    const COLOR_HEALED = new THREE.Color(0x00ff9d);
+
+    // Координаты мыши для параллакса
+    const mouse = { x: 0, y: 0, targetX: 0, targetY: 0 };
+
+    function initThreeJS() {
+      const container = document.getElementById('webgl-container');
+      scene = new THREE.Scene();
+      scene.fog = new THREE.FogExp2(0x040812, 0.045);
+
+      camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 100);
+      camera.position.set(0, 0.2, 9.5);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      container.appendChild(renderer.domElement);
+
+      // Освещение сцены
+      const ambientLight = new THREE.AmbientLight(0x1a365d, 1.5);
+      scene.add(ambientLight);
+
+      const pointLight1 = new THREE.PointLight(0x00f3ff, 2.2, 25);
+      pointLight1.position.set(4, 5, 6);
+      scene.add(pointLight1);
+
+      const pointLight2 = new THREE.PointLight(0xff3b1d, 1.4, 25);
+      pointLight2.position.set(-4, -3, 5);
+      scene.add(pointLight2);
+
+      // Главная группа легких
+      lungsGroup = new THREE.Group();
+      scene.add(lungsGroup);
+
+      // Создаем полупрозрачные голографические контуры правого и левого легкого
+      lungWireMaterial = new THREE.MeshBasicMaterial({
+        color: COLOR_CYAN.clone(),
+        wireframe: true,
+        transparent: true,
+        opacity: 0.12,
+        blending: THREE.AdditiveBlending
+      });
+
+      const lungGeo = new THREE.SphereGeometry(1.75, 22, 22);
+      // Деформируем сферу в анатомическую форму доли легкого
+      const posAttr = lungGeo.attributes.position;
+      for (let i = 0; i < posAttr.count; i++) {
+        let x = posAttr.getX(i);
+        let y = posAttr.getY(i);
+        let z = posAttr.getZ(i);
+        // Сужаем к верхушке, расширяем к диафрагме
+        const heightFactor = (y + 1.75) / 3.5;
+        const taper = 1.15 - heightFactor * 0.55;
+        x *= taper * 0.85;
+        y *= 1.45;
+        z *= taper * 0.78;
+        posAttr.setXYZ(i, x, y, z);
+      }
+      lungGeo.computeVertexNormals();
+
+      leftLungMesh = new THREE.Mesh(lungGeo, lungWireMaterial);
+      leftLungMesh.position.set(-1.75, -0.2, 0);
+      leftLungMesh.rotation.z = 0.12;
+      lungsGroup.add(leftLungMesh);
+
+      rightLungMesh = new THREE.Mesh(lungGeo, lungWireMaterial);
+      rightLungMesh.position.set(1.75, -0.2, 0);
+      rightLungMesh.rotation.z = -0.12;
+      lungsGroup.add(rightLungMesh);
+
+      // Процедурная генерация трахеи и рекурсивного 3D-дерева бронхов
+      bronchiGroup = new THREE.Group();
+      lungsGroup.add(bronchiGroup);
+
+      const baseBranchMat = new THREE.MeshStandardMaterial({
+        color: COLOR_CYAN.clone(),
+        emissive: COLOR_CYAN.clone(),
+        emissiveIntensity: 0.65,
+        roughness: 0.25,
+        metalness: 0.1,
+        transparent: true,
+        opacity: 0.9
+      });
+      bronchiMaterials.push(baseBranchMat);
+
+      // Трахея (центральный ствол)
+      createBranchTube(
+        new THREE.Vector3(0, 2.7, 0),
+        new THREE.Vector3(0, 1.05, 0),
+        0.22,
+        0.19,
+        baseBranchMat
+      );
+
+      // Рекурсивное ветвление левого и правого главных бронхов
+      buildBronchialTree(new THREE.Vector3(0, 1.05, 0), new THREE.Vector3(-0.65, -0.45, 0.05), 0.16, 4, baseBranchMat);
+      buildBronchialTree(new THREE.Vector3(0, 1.05, 0), new THREE.Vector3(0.65, -0.45, -0.05), 0.16, 4, baseBranchMat);
+
+      // Генерация облака био-частиц (альвеолы + частицы слизи при воспалении)
+      const particleCount = 420;
+      const pGeo = new THREE.BufferGeometry();
+      const pPositions = new Float32Array(particleCount * 3);
+
+      for (let i = 0; i < particleCount; i++) {
+        const side = i % 2 === 0 ? -1 : 1;
+        const r = Math.random() * 1.45;
+        const theta = Math.random() * Math.PI * 2;
+        const y = (Math.random() - 0.55) * 3.6;
+        pPositions[i * 3] = side * (0.7 + Math.abs(Math.cos(theta)) * r * 1.3);
+        pPositions[i * 3 + 1] = y;
+        pPositions[i * 3 + 2] = Math.sin(theta) * r * 0.9;
+      }
+      pGeo.setAttribute('position', new THREE.BufferAttribute(pPositions, 3));
+
+      mucusMaterial = new THREE.PointsMaterial({
+        color: COLOR_CYAN.clone(),
+        size: 0.085,
+        transparent: true,
+        opacity: 0.45,
+        blending: THREE.AdditiveBlending
+      });
+
+      mucusParticles = new THREE.Points(pGeo, mucusMaterial);
+      lungsGroup.add(mucusParticles);
+
+      window.addEventListener('resize', onWindowResize);
+      window.addEventListener('mousemove', onMouseMove);
+    }
+
+    // Вспомогательная функция создания трубки-ветви между двумя точками
+    function createBranchTube(startVec, endVec, rStart, rEnd, material) {
+      const midVec = startVec.clone().lerp(endVec, 0.5);
+      midVec.x += (Math.random() - 0.5) * 0.12;
+      midVec.z += (Math.random() - 0.5) * 0.12;
+
+      const curve = new THREE.QuadraticBezierCurve3(startVec, midVec, endVec);
+      const tubeGeo = new THREE.TubeGeometry(curve, 10, (rStart + rEnd) * 0.5, 8, false);
+      const mesh = new THREE.Mesh(tubeGeo, material);
+      bronchiGroup.add(mesh);
+
+      // Светящийся узел в точке бифуркации
+      const jointGeo = new THREE.SphereGeometry(rEnd * 1.15, 8, 8);
+      const jointMesh = new THREE.Mesh(jointGeo, material);
+      jointMesh.position.copy(endVec);
+      bronchiGroup.add(jointMesh);
+    }
+
+    // Рекурсивный генератор бронхиол
+    function buildBronchialTree(start, dir, radius, depth, material) {
+      if (depth <= 0) return;
+      const end = start.clone().add(dir);
+      createBranchTube(start, end, radius, radius * 0.72, material);
+
+      const spread = 0.52;
+      const lenScale = 0.76;
+
+      // Левая и правая дочерние ветви
+      const dir1 = dir.clone().multiplyScalar(lenScale);
+      dir1.applyAxisAngle(new THREE.Vector3(0, 0, 1), spread + (Math.random() - 0.5) * 0.15);
+      dir1.applyAxisAngle(new THREE.Vector3(0, 1, 0), 0.35);
+
+      const dir2 = dir.clone().multiplyScalar(lenScale);
+      dir2.applyAxisAngle(new THREE.Vector3(0, 0, 1), -spread + (Math.random() - 0.5) * 0.15);
+      dir2.applyAxisAngle(new THREE.Vector3(0, 1, 0), -0.35);
+
+      buildBronchialTree(end, dir1, radius * 0.72, depth - 1, material);
+      buildBronchialTree(end, dir2, radius * 0.72, depth - 1, material);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      resizeAll2DCanvases();
+    }
+
+    function onMouseMove(e) {
+      mouse.targetX = (e.clientX / window.innerWidth) * 2 - 1;
+      mouse.targetY = -(e.clientY / window.innerHeight) * 2 + 1;
+
+      // Легкий параллакс заголовка на Сцене 1
+      const heroBox = document.getElementById('hero-parallax-box');
+      if (heroBox) {
+        heroBox.style.transform = `translate3d(${mouse.targetX * -8}px, ${mouse.targetY * 6}px, 0)`;
+      }
+    }
+
+    // Главный цикл анимации Three.js (дыхание легких, морфинг цвета, частицы)
+    const clock = new THREE.Clock();
+    function animate3D() {
+      requestAnimationFrame(animate3D);
+      const t = clock.getElapsedTime();
+
+      // Плавная интерполяция позиции мыши
+      mouse.x += (mouse.targetX - mouse.x) * 0.06;
+      mouse.y += (mouse.targetY - mouse.y) * 0.06;
+
+      // Синусоидальное "дыхание" легких + сжатие при выдохе в Сцене 4
+      const breathWave = Math.sin(t * 2.1) * visualParams.breathAmp;
+      const scaleFactor = 1 + breathWave - visualParams.exhaleCompression * 0.22;
+
+      lungsGroup.scale.set(scaleFactor, scaleFactor * (1 + breathWave * 0.3), scaleFactor);
+      lungsGroup.rotation.y = mouse.x * 0.28 + Math.sin(t * 0.4) * 0.06;
+      lungsGroup.rotation.x = -mouse.y * 0.16;
+
+      // Вычисление текущего цвета тканей (Норма <-> Воспаление <-> Регенерация)
+      const currentColor = new THREE.Color();
+      if (visualParams.inflammation >= 0) {
+        currentColor.copy(COLOR_CYAN).lerp(COLOR_INFLAMED, visualParams.inflammation);
+      } else {
+        currentColor.copy(COLOR_CYAN).lerp(COLOR_HEALED, Math.abs(visualParams.inflammation));
+      }
+
+      bronchiMaterials.forEach((mat) => {
+        mat.color.copy(currentColor);
+        mat.emissive.copy(currentColor);
+        mat.emissiveIntensity = 0.55 + Math.sin(t * 3.0) * 0.15 + Math.max(0, visualParams.inflammation) * 0.45;
+      });
+
+      lungWireMaterial.color.copy(currentColor);
+      mucusMaterial.color.copy(currentColor);
+      mucusMaterial.size = 0.07 + Math.max(0, visualParams.inflammation) * 0.075;
+      mucusMaterial.opacity = 0.35 + Math.max(0, visualParams.inflammation) * 0.45;
+
+      // Вращение и турбулентность частиц слизи
+      mucusParticles.rotation.y = t * (0.08 + Math.max(0, visualParams.inflammation) * 0.25);
+      mucusParticles.position.y = Math.sin(t * 1.6) * 0.08;
+
+      renderer.render(scene, camera);
+    }
+
+    // =========================================================================
+    // 2. GSAP & SCROLLTRIGGER: ХОРЕОГРАФИЯ КАМЕРЫ И ПЕРЕХОДОВ МЕЖДУ СЦЕНАМИ
+    // =========================================================================
+    gsap.registerPlugin(ScrollTrigger, ScrollToPlugin);
+
+    const sceneConfigs = [
+      {
+        id: '#scene-1',
+        label: 'РЕЖИМ: ОБЗОРНЫЙ СКАН',
+        camPos: { x: 0, y: 0.2, z: 9.5 },
+        inflam: 0.0,
+        bpm: '74 уд/м',
+        spo2: '98%',
+        temp: '36.6°C',
+        ledColor: '#00f3ff'
+      },
+      {
+        id: '#scene-2',
+        label: 'РЕЖИМ: МИКРОСКОПИЯ ОЧАГА',
+        camPos: { x: 0.35, y: 0.45, z: 4.3 },
+        inflam: 1.0,
+        bpm: '96 уд/м',
+        spo2: '94%',
+        temp: '37.8°C',
+        ledColor: '#ff3b1d'
+      },
+      {
+        id: '#scene-3',
+        label: 'РЕЖИМ: ДИАГНОСТИКА HUD',
+        camPos: { x: -1.4, y: 0.1, z: 6.8 },
+        inflam: 0.85,
+        bpm: '92 уд/м',
+        spo2: '95%',
+        temp: '37.6°C',
+        ledColor: '#ff6b00'
+      },
+      {
+        id: '#scene-4',
+        label: 'РЕЖИМ: СПИРОМЕТРИЯ ФВД',
+        camPos: { x: 2.1, y: 0.0, z: 7.4 },
+        inflam: 0.75,
+        bpm: '88 уд/м',
+        spo2: '95%',
+        temp: '37.4°C',
+        ledColor: '#ff6b00'
+      },
+      {
+        id: '#scene-5',
+        label: 'РЕЖИМ: ТЕРАПИЯ И РЕГЕНЕРАЦИЯ',
+        camPos: { x: 0, y: 0.2, z: 9.2 },
+        inflam: -1.0,
+        bpm: '72 уд/м',
+        spo2: '99%',
+        temp: '36.6°C',
+        ledColor: '#00ff9d'
+      }
+    ];
+
+    function initScrollChoreography() {
+      sceneConfigs.forEach((cfg, index) => {
+        ScrollTrigger.create({
+          trigger: cfg.id,
+          start: 'top 55%',
+          end: 'bottom 55%',
+          onEnter: () => activateSceneState(index),
+          onEnterBack: () => activateSceneState(index)
+        });
+      });
+
+      // Прогресс-бар глубины сканирования при скролле всей страницы
+      ScrollTrigger.create({
+        trigger: '#presentation-root',
+        start: 'top top',
+        end: 'bottom bottom',
+        onUpdate: (self) => {
+          const pct = Math.round(self.progress * 100);
+          document.getElementById('scan-progress-bar').style.height = `${Math.max(10, pct)}%`;
+          document.getElementById('scan-depth-val').textContent = `${pct}%`;
+        }
+      });
+    }
+
+    function activateSceneState(index) {
+      const cfg = sceneConfigs[index];
+
+      // Плавный перелет 3D-камеры
+      gsap.to(camera.position, {
+        x: cfg.camPos.x,
+        y: cfg.camPos.y,
+        z: cfg.camPos.z,
+        duration: 1.4,
+        ease: 'power3.out'
+      });
+
+      // Морфинг цвета воспаления / регенерации
+      gsap.to(visualParams, {
+        inflammation: cfg.inflam,
+        duration: 1.2,
+        ease: 'power2.inOut'
+      });
+
+      // Обновление телеметрии в верхнем HUD
+      document.getElementById('hud-mode-label').textContent = cfg.label;
+      document.getElementById('telemetry-bpm').innerHTML = `${cfg.bpm.split(' ')[0]} <span class="text-[10px] font-normal">уд/м</span>`;
+      document.getElementById('telemetry-spo2').textContent = cfg.spo2;
+      document.getElementById('telemetry-temp').textContent = cfg.temp;
+
+      const led = document.getElementById('status-led');
+      led.style.backgroundColor = cfg.ledColor;
+      led.style.boxShadow = `0 0 10px ${cfg.ledColor}`;
+
+      // Подсветка активной кнопки навигации (Desktop + Mobile)
+      document.querySelectorAll('.nav-dot').forEach((btn, idx) => {
+        const dot = btn.querySelector('span:last-child');
+        const label = btn.querySelector('span:first-child');
+        if (idx === index) {
+          btn.classList.add('bg-cyan-500/20', 'border-cyan-400/50');
+          btn.classList.remove('border-transparent');
+          label.classList.replace('text-slate-400', 'text-cyan-200');
+          dot.style.backgroundColor = cfg.ledColor;
+          dot.style.boxShadow = `0 0 8px ${cfg.ledColor}`;
+        } else {
+          btn.classList.remove('bg-cyan-500/20', 'border-cyan-400/50');
+          btn.classList.add('border-transparent');
+          label.classList.replace('text-cyan-200', 'text-slate-400');
+          dot.style.backgroundColor = '#475569';
+          dot.style.boxShadow = 'none';
+        }
+      });
+
+      document.querySelectorAll('.mob-nav-btn').forEach((btn, idx) => {
+        if (idx === index) {
+          btn.classList.add('bg-cyan-500/25', 'text-cyan-200', 'font-bold');
+          btn.classList.remove('text-slate-400');
+        } else {
+          btn.classList.remove('bg-cyan-500/25', 'text-cyan-200', 'font-bold');
+          btn.classList.add('text-slate-400');
+        }
+      });
+    }
+
+    function scrollToScene(index) {
+      gsap.to(window, {
+        duration: 1.1,
+        scrollTo: { y: sceneConfigs[index].id, offsetY: 0 },
+        ease: 'power3.inOut'
+      });
+    }
+
+    // =========================================================================
+    // 3. СЦЕНА 2: ПЕРЕКЛЮЧАТЕЛЬ СОСТОЯНИЯ БРОНХОВ И 3D-TILT КАРТОЧЕК
+    // =========================================================================
+    function setBronchiVisualState(state) {
+      const btnNorm = document.getElementById('btn-state-normal');
+      const btnInfl = document.getElementById('btn-state-inflamed');
+
+      if (state === 'normal') {
+        gsap.to(visualParams, { inflammation: 0.0, duration: 0.9 });
+        btnNorm.className = 'px-3.5 py-2 rounded-xl font-mono-tech text-xs font-bold transition-all bg-[#00f3ff]/25 text-[#00f3ff] border border-[#00f3ff]/60 shadow-[0_0_15px_rgba(0,243,255,0.35)] cursor-pointer';
+        btnInfl.className = 'px-3.5 py-2 rounded-xl font-mono-tech text-xs transition-all text-slate-300 hover:text-white cursor-pointer';
+      } else {
+        gsap.to(visualParams, { inflammation: 1.0, duration: 0.9 });
+        btnInfl.className = 'px-3.5 py-2 rounded-xl font-mono-tech text-xs font-bold transition-all bg-[#ff3b1d]/25 text-[#ff6b00] border border-[#ff3b1d]/60 shadow-[0_0_15px_rgba(255,59,29,0.35)] cursor-pointer';
+        btnNorm.className = 'px-3.5 py-2 rounded-xl font-mono-tech text-xs transition-all text-slate-300 hover:text-white cursor-pointer';
+      }
+    }
+
+    function initTiltCards() {
+      document.querySelectorAll('[data-tilt]').forEach((card) => {
+        card.addEventListener('mousemove', (e) => {
+          const rect = card.getBoundingClientRect();
+          const x = (e.clientX - rect.left) / rect.width - 0.5;
+          const y = (e.clientY - rect.top) / rect.height - 0.5;
+          card.style.transform = `perspective(900px) rotateY(${x * 14}deg) rotateX(${-y * 14}deg) scale3d(1.02, 1.02, 1.02)`;
+        });
+        card.addEventListener('mouseleave', () => {
+          card.style.transform = 'perspective(900px) rotateY(0deg) rotateX(0deg) scale3d(1, 1, 1)';
+        });
+      });
+    }
+
+    // =========================================================================
+    // 4. СЦЕНА 3: АУСКУЛЬТАЦИЯ (CANVAS ВОЛНА + WEB AUDIO СИНТЕЗАТОР ХРИПОВ)
+    // =========================================================================
+    let auscMode = 'bronchitis';
+    let audioCtx = null;
+    let isAudioPlaying = false;
+    let audioInterval = null;
+
+    function setAuscultationMode(mode) {
+      auscMode = mode;
+      const badge = document.getElementById('ausc-badge');
+      const freqLabel = document.getElementById('ausc-freq-label');
+      const desc = document.getElementById('ausc-desc');
+      const btnN = document.getElementById('btn-ausc-normal');
+      const btnB = document.getElementById('btn-ausc-bronchitis');
+
+      if (mode === 'normal') {
+        badge.textContent = 'НОРМА // ЧИСТО';
+        badge.className = 'px-2 py-0.5 rounded bg-[#00f3ff]/20 border border-[#00f3ff]/50 font-mono-tech text-[10px] text-[#00f3ff]';
+        freqLabel.textContent = '110–240 Гц (Везикулярное)';
+        freqLabel.className = 'text-[#00f3ff]';
+        desc.textContent = 'Мягкое везикулярное дыхание равномерно проводится во все отделы легких. Побочные дыхательные шумы и хрипы отсутствуют.';
+        btnN.className = 'py-2 px-2 rounded-lg border border-[#00f3ff] bg-[#00f3ff]/20 text-white font-bold transition-all cursor-pointer';
+        btnB.className = 'py-2 px-2 rounded-lg border border-slate-700 text-slate-300 hover:border-[#ff6b00] transition-all cursor-pointer';
+      } else {
+        badge.textContent = 'СУХИЕ ХРИПЫ';
+        badge.className = 'px-2 py-0.5 rounded bg-[#ff3b1d]/20 border border-[#ff3b1d]/50 font-mono-tech text-[10px] text-[#ff6b00]';
+        freqLabel.textContent = '420–850 Гц (Свистящие)';
+        freqLabel.className = 'text-[#ff6b00]';
+        desc.textContent = 'Жесткое дыхание с удлиненным выдохом; выслушиваются рассеянные сухие свистящие и жужжащие хрипы, меняющие тембр после откашливания.';
+        btnB.className = 'py-2 px-2 rounded-lg border border-[#ff6b00] bg-[#ff3b1d]/20 text-white font-bold transition-all cursor-pointer';
+        btnN.className = 'py-2 px-2 rounded-lg border border-slate-700 text-slate-300 hover:border-cyan-400 transition-all cursor-pointer';
+      }
+    }
+
+    // Синтез дыхания и свистящих хрипов через Web Audio API (без внешних файлов)
+    function toggleAuscultationAudio() {
+      const btnText = document.getElementById('audio-btn-text');
+      const icon = document.getElementById('audio-icon');
+
+      if (isAudioPlaying) {
+        isAudioPlaying = false;
+        clearInterval(audioInterval);
+        btnText.textContent = 'ПРОСЛУШАТЬ СТЕТОСКОП (ЗВУК)';
+        icon.textContent = '🔊';
+        return;
+      }
+
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      isAudioPlaying = true;
+      btnText.textContent = 'ОСТАНОВИТЬ СТЕТОСКОП';
+      icon.textContent = '⏹';
+
+      const playBreathCycle = () => {
+        if (!isAudioPlaying) return;
+        const now = audioCtx.currentTime;
+
+        // Генератор белого шума для имитации потока воздуха в бронхах
+        const bufferSize = audioCtx.sampleRate * 2.2;
+        const noiseBuffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const output = noiseBuffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+          output[i] = Math.random() * 2 - 1;
+        }
+
+        const whiteNoise = audioCtx.createBufferSource();
+        whiteNoise.buffer = noiseBuffer;
+
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.setValueAtTime(auscMode === 'normal' ? 180 : 320, now);
+        filter.Q.setValueAtTime(auscMode === 'normal' ? 1.5 : 3.2, now);
+
+        const gainNode = audioCtx.createGain();
+        gainNode.gain.setValueAtTime(0.001, now);
+        // Фаза вдоха
+        gainNode.gain.linearRampToValueAtTime(0.14, now + 0.55);
+        gainNode.gain.linearRampToValueAtTime(0.02, now + 0.95);
+        // Фаза выдоха (удлинена при бронхите)
+        gainNode.gain.linearRampToValueAtTime(auscMode === 'normal' ? 0.08 : 0.18, now + 1.35);
+        gainNode.gain.exponentialRampToValueAtTime(0.001, now + 2.15);
+
+        whiteNoise.connect(filter);
+        filter.connect(gainNode);
+        gainNode.connect(audioCtx.destination);
+        whiteNoise.start(now);
+
+        // Если выбран режим "Хрипы (Бронхит)", добавляем высокочастотный свист на выдохе
+        if (auscMode === 'bronchitis') {
+          const wheezeOsc = audioCtx.createOscillator();
+          const wheezeGain = audioCtx.createGain();
+          wheezeOsc.type = 'sine';
+          wheezeOsc.frequency.setValueAtTime(540, now + 1.0);
+          wheezeOsc.frequency.exponentialRampToValueAtTime(760, now + 1.55);
+          wheezeOsc.frequency.exponentialRampToValueAtTime(480, now + 2.05);
+
+          wheezeGain.gain.setValueAtTime(0.0001, now + 1.0);
+          wheezeGain.gain.linearRampToValueAtTime(0.045, now + 1.3);
+          wheezeGain.gain.exponentialRampToValueAtTime(0.0001, now + 2.1);
+
+          wheezeOsc.connect(wheezeGain);
+          wheezeGain.connect(audioCtx.destination);
+          wheezeOsc.start(now + 1.0);
+          wheezeOsc.stop(now + 2.12);
+        }
+      };
+
+      playBreathCycle();
+      audioInterval = setInterval(playBreathCycle, 2400);
+    }
+
+    // Отрисовка живой осциллограммы дыхания на Canvas
+    function startAuscultationVisualizer() {
+      const canvas = document.getElementById('auscultation-canvas');
+      const ctx = canvas.getContext('2d');
+      let phase = 0;
+
+      function renderWave() {
+        requestAnimationFrame(renderWave);
+        const w = canvas.width;
+        const h = canvas.height;
+        if (!w || !h) return;
+
+        ctx.fillStyle = 'rgba(2, 6, 14, 0.28)';
+        ctx.fillRect(0, 0, w, h);
+
+        // Сетка осциллографа
+        ctx.strokeStyle = 'rgba(0, 243, 255, 0.08)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, h / 2);
+        ctx.lineTo(w, h / 2);
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.lineWidth = 2.2;
+        ctx.strokeStyle = auscMode === 'normal' ? '#00f3ff' : '#ff6b00';
+
+        for (let x = 0; x < w; x++) {
+          const normX = x / w;
+          const envelope = Math.sin(normX * Math.PI);
+          let yOffset = Math.sin(x * 0.045 + phase) * 18 * envelope;
+
+          if (auscMode === 'bronchitis') {
+            // Добавляем высокочастотные гармоники свистящих хрипов
+            yOffset += Math.sin(x * 0.22 - phase * 2.4) * 14 * envelope;
+            yOffset += Math.cos(x * 0.37 + phase * 3.1) * 7 * envelope;
+          }
+
+          const y = h / 2 + yOffset;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+        phase += auscMode === 'normal' ? 0.08 : 0.14;
+      }
+      renderWave();
+    }
+
+    // =========================================================================
+    // 5. СЦЕНА 3: ИНТЕРАКТИВНЫЙ РЕНТГЕН-СЛАЙДЕР ДО/ПОСЛЕ
+    // =========================================================================
+    function initXraySlider() {
+      const container = document.getElementById('xray-container');
+      const normalLayer = document.getElementById('xray-normal-layer');
+      const line = document.getElementById('xray-line');
+      const handle = document.getElementById('xray-handle');
+      let isDragging = false;
+
+      const updateSlider = (clientX) => {
+        const rect = container.getBoundingClientRect();
+        let pct = ((clientX - rect.left) / rect.width) * 100;
+        pct = Math.max(5, Math.min(95, pct));
+        normalLayer.style.width = `${pct}%`;
+        line.style.left = `${pct}%`;
+        handle.style.left = `${pct}%`;
+      };
+
+      container.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        updateSlider(e.clientX);
+      });
+      window.addEventListener('mousemove', (e) => {
+        if (isDragging) updateSlider(e.clientX);
+      });
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+      });
+
+      // Поддержка сенсорных экранов
+      container.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        updateSlider(e.touches[0].clientX);
+      }, { passive: true });
+      window.addEventListener('touchmove', (e) => {
+        if (isDragging && e.touches[0]) updateSlider(e.touches[0].clientX);
+      }, { passive: true });
+      window.addEventListener('touchend', () => {
+        isDragging = false;
+      });
+    }
+
+    // Повторный экспресс-анализ крови в Лаборатории
+    function runLabReScan() {
+      const log = document.getElementById('lab-terminal-log');
+      const valCrp = document.getElementById('val-crp');
+      const valWbc = document.getElementById('val-wbc');
+      const barCrp = document.getElementById('bar-crp');
+      const barWbc = document.getElementById('bar-wbc');
+
+      log.textContent = '> СКАНИРОВАНИЕ ОБРАЗЦА СЫВОРОТКИ...';
+      barCrp.style.width = '15%';
+      barWbc.style.width = '15%';
+
+      setTimeout(() => {
+        const crp = (21 + Math.random() * 7).toFixed(1);
+        const wbc = (10.5 + Math.random() * 1.8).toFixed(1);
+        valCrp.textContent = `${crp} мг/л`;
+        valWbc.textContent = `${wbc} ×10⁹/л`;
+        barCrp.style.width = `${Math.min(92, crp * 2.8)}%`;
+        barWbc.style.width = `${Math.min(88, wbc * 5.6)}%`;
+        log.textContent = '> ЗАКЛЮЧЕНИЕ: Острый воспалительный ответ (Вирусный профиль).';
+      }, 650);
+    }
+
+    // =========================================================================
+    // 6. СЦЕНА 4: ИНТЕРАКТИВНАЯ СПИРОМЕТРИЯ (УДЕРЖАНИЕ ВЫДОХА)
+    // =========================================================================
+    let isExhaling = false;
+    let exhaleProgress = 0; // от 0 до 1
+
+    function initSpirometry() {
+      const btn = document.getElementById('btn-exhale');
+      const canvas = document.getElementById('spirometry-canvas');
+      const ctx = canvas.getContext('2d');
+
+      const startExhale = (e) => {
+        if (e) e.preventDefault();
+        isExhaling = true;
+        btn.classList.add('is-active');
+        document.getElementById('spiro-hint-overlay').style.display = 'none';
+      };
+
+      const stopExhale = () => {
+        isExhaling = false;
+        btn.classList.remove('is-active');
+      };
+
+      btn.addEventListener('mousedown', startExhale);
+      window.addEventListener('mouseup', stopExhale);
+      btn.addEventListener('touchstart', startExhale, { passive: false });
+      window.addEventListener('touchend', stopExhale);
+
+      function drawSpirometryLoop() {
+        requestAnimationFrame(drawSpirometryLoop);
+        const w = canvas.width;
+        const h = canvas.height;
+        if (!w || !h) return;
+
+        // Обновление прогресса выдоха при удержании кнопки
+        if (isExhaling && exhaleProgress < 1) {
+          exhaleProgress = Math.min(1, exhaleProgress + 0.014);
+        }
+
+        // Передаем сжатие в 3D-модель легких
+        visualParams.exhaleCompression = isExhaling ? exhaleProgress : exhaleProgress * 0.4;
+
+        ctx.clearRect(0, 0, w, h);
+
+        // Координатная сетка графика Поток (Y) / Объем (X)
+        const padL = 42, padR = 24, padT = 24, padB = 32;
+        const plotW = w - padL - padR;
+        const plotH = h - padT - padB;
+
+        ctx.strokeStyle = 'rgba(0, 243, 255, 0.12)';
+        ctx.lineWidth = 1;
+        for (let i = 0; i <= 5; i++) {
+          const y = padT + (plotH / 5) * i;
+          ctx.beginPath();
+          ctx.moveTo(padL, y);
+          ctx.lineTo(w - padR, y);
+          ctx.stroke();
+        }
+
+        // Подписи осей
+        ctx.fillStyle = '#64748b';
+        ctx.font = '10px "JetBrains Mono", monospace';
+        ctx.fillText('ПОТОК (л/с)', 8, 16);
+        ctx.fillText('ОБЪЕМ ВЫДОХА (л)', w - 125, h - 10);
+
+        // 1. Эталонная кривая НОРМЫ (циановая пунктирная линия)
+        ctx.save();
+        ctx.setLineDash([6, 4]);
+        ctx.strokeStyle = '#00f3ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (let i = 0; i <= 100; i++) {
+          const t = i / 100; // 0..1 по объему
+          // Быстрый пик потока (PEF) на 15% объема и ровное линейное снижение
+          const flow = t < 0.16
+            ? Math.sin((t / 0.16) * (Math.PI / 2)) * 0.92
+            : 0.92 * (1 - (t - 0.16) / 0.84);
+          const px = padL + t * plotW;
+          const py = padT + plotH - flow * plotH;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+        ctx.restore();
+
+        // 2. Кривая ПАЦИЕНТА С БРОНХИТОМ (оранжевая с характерным "прогибом" обструкции)
+        if (exhaleProgress > 0) {
+          const maxSteps = Math.floor(exhaleProgress * 100);
+          ctx.strokeStyle = '#ff6b00';
+          ctx.lineWidth = 3.2;
+          ctx.shadowColor = '#ff3b1d';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+
+          for (let i = 0; i <= maxSteps; i++) {
+            const t = i / 100;
+            // При обструкции пик ниже (0.64) и нисходящее колено вогнуто внутрь (степень 1.85)
+            const flow = t < 0.14
+              ? Math.sin((t / 0.14) * (Math.PI / 2)) * 0.64
+              : 0.64 * Math.pow(1 - (t - 0.14) / 0.86, 1.85);
+
+            const px = padL + t * plotW * 0.88; // ФЖЕЛ слегка снижена
+            const py = padT + plotH - flow * plotH;
+            if (i === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+
+          // Динамический расчет числовых показателей
+          const currentFev1 = (exhaleProgress * 2.42).toFixed(2);
+          const currentFvc = (exhaleProgress * 4.05).toFixed(2);
+          document.getElementById('spiro-fev1').textContent = `${currentFev1} л`;
+          document.getElementById('spiro-fvc').textContent = `${currentFvc} л`;
+
+          if (exhaleProgress > 0.35) {
+            const ratio = Math.round((2.42 / 4.05) * 100);
+            document.getElementById('spiro-tiffeneau').textContent = `${ratio}% (Снижен)`;
+            document.getElementById('spiro-verdict').textContent =
+              'Зафиксирован вогнутый профиль нисходящего колена и снижение индекса Тиффно (< 70%) — признаки бронхиальной обструкции.';
+          }
+        }
+      }
+      drawSpirometryLoop();
+    }
+
+    function resetSpirometry() {
+      exhaleProgress = 0;
+      isExhaling = false;
+      visualParams.exhaleCompression = 0;
+      document.getElementById('spiro-fev1').textContent = '0.00 л';
+      document.getElementById('spiro-fvc').textContent = '0.00 л';
+      document.getElementById('spiro-tiffeneau').textContent = '— %';
+      document.getElementById('spiro-hint-overlay').style.display = 'flex';
+    }
+
+    // =========================================================================
+    // 7. СЦЕНА 5: ВЫБОР МОДУЛЯ ТЕРАПИИ И ЭФФЕКТ НА 3D-ЛЕГКИЕ
+    // =========================================================================
+    const therapyProtocols = [
+      {
+        tag: 'АКТИВНЫЙ ПРОТОКОЛ: МУКОЛИТИЧЕСКАЯ ТЕРАПИЯ (АМБРОКСОЛ / АЦЕТИЛЦИСТЕИН)',
+        title: 'Разжижение секрета и восстановление мукоцилиарного клиренса',
+        desc: 'Разрывает дисульфидные связи мукополисахаридов мокроты, уменьшая ее адгезию к стенкам бронхов. Усиливает синтез сурфактанта и ускоряет эвакуацию слизи из бронхиол.',
+        effect: 'Очищение просвета +94%',
+        breathAmp: 0.055
+      },
+      {
+        tag: 'АКТИВНЫЙ ПРОТОКОЛ: БРОНХОДИЛАТАТОРЫ (САЛЬБУТАМОЛ / ИПРАТРОПИЙ)',
+        title: 'Расслабление гладкой мускулатуры и расширение бронхиального дерева',
+        desc: 'Селективная стимуляция β2-адренорецепторов бронхов устраняет экспираторный спазм, нормализует пиковую скорость выдоха (ПСВ) и купирует приступы одышки.',
+        effect: 'Дилатация бронхов +42%',
+        breathAmp: 0.068
+      },
+      {
+        tag: 'АКТИВНЫЙ ПРОТОКОЛ: РЕГИДРАТАЦИЯ И НЕБУЛАЙЗЕРНАЯ ТЕРАПИЯ',
+        title: 'Увлажнение респираторного эпителия и снижение гиперреактивности',
+        desc: 'Поддержание влажности воздуха 55–65%, щелочное питье и ингаляции стерильным физиологическим раствором восстанавливают работу мерцательного эпителия.',
+        effect: 'Гидратация эпителия 100%',
+        breathAmp: 0.05
+      },
+      {
+        tag: 'АКТИВНЫЙ ПРОТОКОЛ: ДОКАЗАТЕЛЬНЫЙ ЭТИОТРОПНЫЙ КОНТРОЛЬ',
+        title: 'Рациональная фармакотерапия без необоснованных антибиотиков',
+        desc: 'Более 90% случаев острого бронхита имеют вирусную природу. Антибактериальная терапия назначается исключительно при подтверждении бактериальной суперинфекции.',
+        effect: 'Микробиом защищен',
+        breathAmp: 0.048
+      }
+    ];
+
+    function selectTherapy(idx) {
+      const p = therapyProtocols[idx];
+      document.getElementById('therapy-detail-tag').textContent = p.tag;
+      document.getElementById('therapy-detail-title').textContent = p.title;
+      document.getElementById('therapy-detail-desc').textContent = p.desc;
+      document.getElementById('therapy-detail-effect').textContent = p.effect;
+
+      // Визуальное выделение выбранной карточки
+      for (let i = 0; i < 4; i++) {
+        const card = document.getElementById(`therapy-card-${i}`);
+        if (i === idx) {
+          card.classList.add('border-[#00ff9d]/60', 'bg-[#00ff9d]/10');
+        } else {
+          card.classList.remove('border-[#00ff9d]/60', 'bg-[#00ff9d]/10');
+        }
+      }
+
+      // Импульс био-зеленого свечения на 3D-модели легких
+      gsap.to(visualParams, {
+        inflammation: -1.0,
+        breathAmp: p.breathAmp,
+        duration: 0.8
+      });
+    }
+
+    // =========================================================================
+    // 8. АДАПТАЦИЯ РАЗМЕРОВ 2D-CANVAS И ЗАПУСК ПРИЛОЖЕНИЯ
+    // =========================================================================
+    function resizeAll2DCanvases() {
+      ['auscultation-canvas', 'spirometry-canvas'].forEach((id) => {
+        const c = document.getElementById(id);
+        if (c && c.parentElement) {
+          c.width = c.parentElement.clientWidth;
+          c.height = c.parentElement.clientHeight;
+        }
+      });
+    }
+
+    window.onload = function () {
+      initThreeJS();
+      resizeAll2DCanvases();
+      initScrollChoreography();
+      initTiltCards();
+      startAuscultationVisualizer();
+      initXraySlider();
+      initSpirometry();
+      animate3D();
+    };
+  </script>
+</body>
+</html>

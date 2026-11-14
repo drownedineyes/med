@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>CYBER-OPTICS 3D // Современная диагностика астигматизма</title>
+  <style>
+    :root {
+      --bg: #04060d;
+      --cyan: #00f3ff;
+      --amber: #ffaa00;
+      --rose: #ff1e56;
+      --glass: rgba(10, 15, 28, 0.78);
+      --border: rgba(0, 243, 255, 0.32);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      background: var(--bg);
+      color: #f8fafc;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+    }
+
+    /* Fixed 3D WebGL Viewport */
+    #webgl-stage {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      display: block;
+      touch-action: pan-y;
+    }
+
+    /* Top Navigation Bar */
+    .hud-header {
+      position: fixed;
+      top: 10px;
+      left: 12px;
+      right: 12px;
+      max-width: 1280px;
+      margin: 0 auto;
+      z-index: 30;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(6, 10, 20, 0.85);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--cyan);
+      white-space: nowrap;
+    }
+
+    .brand-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--cyan);
+      box-shadow: 0 0 10px var(--cyan);
+    }
+
+    .scene-tabs {
+      display: flex;
+      gap: 5px;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .scene-tabs::-webkit-scrollbar { display: none; }
+
+    .tab-btn {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(255, 255, 255, 0.05);
+      color: #94a3b8;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.2s ease;
+    }
+
+    .tab-btn.active {
+      background: rgba(0, 243, 255, 0.2);
+      color: #ffffff;
+      border-color: var(--cyan);
+      box-shadow: 0 0 12px rgba(0, 243, 255, 0.35);
+    }
+
+    /* Storyboard Scroll Sections */
+    .story-container {
+      position: relative;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    .scene-section {
+      min-height: 100vh;
+      width: 100%;
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 74px 14px 148px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+    }
+
+    @media (min-width: 900px) {
+      .scene-section {
+        justify-content: center;
+        padding: 90px 32px 140px 32px;
+      }
+    }
+
+    .glass-card {
+      pointer-events: auto;
+      width: 100%;
+      max-width: 540px;
+      background: var(--glass);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 20px 20px;
+      box-shadow: 0 16px 45px rgba(0, 0, 0, 0.78);
+      opacity: 0.35;
+      transform: translateY(20px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+    }
+
+    .scene-section.active .glass-card {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .kicker {
+      display: inline-block;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      padding: 4px 10px;
+      border-radius: 99px;
+      background: rgba(0, 243, 255, 0.14);
+      border: 1px solid rgba(0, 243, 255, 0.4);
+      color: var(--cyan);
+      margin-bottom: 10px;
+    }
+
+    .kicker.amber {
+      background: rgba(255, 170, 0, 0.15);
+      border-color: rgba(255, 170, 0, 0.45);
+      color: var(--amber);
+    }
+
+    .kicker.rose {
+      background: rgba(255, 30, 86, 0.18);
+      border-color: rgba(255, 30, 86, 0.5);
+      color: #ff6b8b;
+    }
+
+    h1, h2 {
+      font-size: clamp(1.45rem, 3.2vw, 2.35rem);
+      font-weight: 800;
+      line-height: 1.12;
+      color: #ffffff;
+      margin-bottom: 10px;
+    }
+
+    .chromatic-title {
+      text-shadow: -2.5px 0 1px rgba(255, 30, 86, 0.85), 2.5px 0 1px rgba(0, 243, 255, 0.85);
+    }
+
+    .lead {
+      font-size: 0.94rem;
+      line-height: 1.5;
+      color: #cbd5e1;
+      margin-bottom: 14px;
+    }
+
+    .metrics-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .metric {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-left: 3px solid var(--cyan);
+      border-radius: 10px;
+      padding: 9px 11px;
+    }
+
+    .metric.amber { border-left-color: var(--amber); }
+    .metric.rose { border-left-color: var(--rose); }
+
+    .m-label {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 10px;
+      color: #94a3b8;
+      text-transform: uppercase;
+    }
+
+    .m-val {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #ffffff;
+      margin-top: 2px;
+    }
+
+    .m-desc {
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .hint-bar {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      color: #e2e8f0;
+      background: rgba(0, 243, 255, 0.1);
+      border: 1px solid rgba(0, 243, 255, 0.25);
+      padding: 8px 12px;
+      border-radius: 10px;
+    }
+
+    /* Bottom Docked Control Console */
+    .bottom-hud {
+      position: fixed;
+      bottom: 10px;
+      left: 12px;
+      right: 12px;
+      max-width: 1280px;
+      margin: 0 auto;
+      z-index: 30;
+      background: rgba(6, 10, 20, 0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      box-shadow: 0 12px 35px rgba(0, 0, 0, 0.8);
+    }
+
+    @media (min-width: 768px) {
+      .bottom-hud {
+        grid-template-columns: 220px 1fr 1fr;
+        align-items: center;
+      }
+    }
+
+    .hud-status {
+      display: none;
+    }
+    @media (min-width: 768px) {
+      .hud-status {
+        display: flex;
+        flex-direction: column;
+      }
+    }
+
+    .ctrl-box {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .ctrl-top {
+      display: flex;
+      justify-content: space-between;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 99px;
+      background: rgba(255, 255, 255, 0.16);
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--cyan);
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 10px var(--cyan);
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen Solid 3D WebGL Canvas -->
+  <canvas id="webgl-stage"></canvas>
+
+  <!-- Top Telemetry Navigation -->
+  <header class="hud-header">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>CYBER-OPTICS 3D</span>
+    </div>
+    <nav class="scene-tabs">
+      <button class="tab-btn active" onclick="goToScene(0)">01. 3D-Глаз</button>
+      <button class="tab-btn" onclick="goToScene(1)">02. Лучи и Роговица</button>
+      <button class="tab-btn" onclick="goToScene(2)">03. 3D-Ночной Город</button>
+      <button class="tab-btn" onclick="goToScene(3)">04. Топография 3D</button>
+      <button class="tab-btn" onclick="goToScene(4)">05. Pentacam Лазер</button>
+      <button class="tab-btn" onclick="goToScene(5)">06. 3D-Линза</button>
+    </nav>
+  </header>
+
+  <!-- Scrollable Storyboard -->
+  <main class="story-container">
+
+    <!-- SCENE 1 -->
+    <section class="scene-section active" data-scene="0">
+      <div class="glass-card">
+        <span class="kicker">Сцена 01 // Анатомическая 3D-модель</span>
+        <h1 class="chromatic-title">Астигматизм: Искажение</h1>
+        <p class="lead">
+          Перед вами трехмерное глазное яблоко со склерой, радужной оболочкой, зрачком и прозрачным куполом роговицы. Покрутите 3D-модель пальцем по верхней части экрана.
+        </p>
+        <div class="metrics-row">
+          <div class="metric">
+            <div class="m-label">Норма рефракции</div>
+            <div class="m-val">43.00 D</div>
+            <div class="m-desc">Сферическая роговица</div>
+          </div>
+          <div class="metric rose">
+            <div class="m-label">Текущий цилиндр</div>
+            <div class="m-val" id="s1-cyl">-3.50 D</div>
+            <div class="m-desc">Торическая деформация</div>
+          </div>
+        </div>
+        <div class="hint-bar">↻ Вращайте 3D-модель глаза пальцем/мышью | Скролльте вниз ↓</div>
+      </div>
+    </section>
+
+    <!-- SCENE 2 -->
+    <section class="scene-section" data-scene="1">
+      <div class="glass-card">
+        <span class="kicker amber">Сцена 02 // Сфера против Эллипсоида</span>
+        <h2>Разрез глаза и Коноид Штурма</h2>
+        <p class="lead">
+          Камера поворачивается в профиль. Сквозь деформированную роговицу и 3D-хрусталик проходят два пучка света: вертикальный (циановый) фокусируется раньше сетчатки, а горизонтальный (янтарный) — за ней.
+        </p>
+        <div class="metrics-row">
+          <div class="metric">
+            <div class="m-label">Крутой меридиан</div>
+            <div class="m-val" id="s2-steep">46.0 D</div>
+            <div class="m-desc">Передний фокус (Циан)</div>
+          </div>
+          <div class="metric amber">
+            <div class="m-label">Плоский меридиан</div>
+            <div class="m-val" id="s2-flat">41.8 D</div>
+            <div class="m-desc">Задний фокус (Янтарь)</div>
+          </div>
+        </div>
+        <div class="hint-bar">Двигайте ползунок Cyl внизу, чтобы сжимать 3D-роговицу и лучи</div>
+      </div>
+    </section>
+
+    <!-- SCENE 3 -->
+    <section class="scene-section" data-scene="2">
+      <div class="glass-card">
+        <span class="kicker rose">Сцена 03 // Точка зрения пациента (POV)</span>
+        <h2>3D-Магистраль и эффект Гало</h2>
+        <p class="lead">
+          Вид глазами пациента на ночное шоссе с 3D-зданиями, фонарями и автомобилями. Из-за несферической роговицы фары и стоп-сигналы растягиваются в длинные наклонные 3D-лучи (starbursts).
+        </p>
+        <div class="metrics-row">
+          <div class="metric rose">
+            <div class="m-label">Длина лучей Гало</div>
+            <div class="m-val" id="s3-halo">Высокая</div>
+            <div class="m-desc">Зависит от диоптрий Cyl</div>
+          </div>
+          <div class="metric amber">
+            <div class="m-label">Наклон спиц света</div>
+            <div class="m-val" id="s3-axis">135°</div>
+            <div class="m-desc">Вдоль оси астигматизма</div>
+          </div>
+        </div>
+        <div class="hint-bar">Меняйте ползунки Cyl и Axis — 3D-лучи фар меняют угол и длину</div>
+      </div>
+    </section>
+
+    <!-- SCENE 4 -->
+    <section class="scene-section" data-scene="3">
+      <div class="glass-card">
+        <span class="kicker">Сцена 04 // Кератотопография</span>
+        <h2>3D-Купол высот («Галстук-бабочка»)</h2>
+        <p class="lead">
+          Над глазом разворачивается 3D-голограмма топографии роговицы. Красная восьмерка показывает зону крутого меридиана (усиленного преломления), синие края — плоский меридиан.
+        </p>
+        <div class="metrics-row">
+          <div class="metric rose">
+            <div class="m-label">K-Max (Красный пик)</div>
+            <div class="m-val" id="s4-kmax">46.8 D</div>
+            <div class="m-desc">Радиус кривизны 7.21 мм</div>
+          </div>
+          <div class="metric">
+            <div class="m-label">K-Min (Синяя зона)</div>
+            <div class="m-val" id="s4-kmin">41.5 D</div>
+            <div class="m-desc">Радиус кривизны 8.13 мм</div>
+          </div>
+        </div>
+        <div class="hint-bar">↻ Поверните 3D-купол топографии пальцем, чтобы увидеть рельеф высот</div>
+      </div>
+    </section>
+
+    <!-- SCENE 5 -->
+    <section class="scene-section" data-scene="4">
+      <div class="glass-card">
+        <span class="kicker">Сцена 05 // Шаймпфлюг-камера Pentacam</span>
+        <h2>Лазерный 3D-срез и Пахиметрия</h2>
+        <p class="lead">
+          Неоновый лазерный луч проходит сквозь 3D-модель роговицы сверху вниз, строя точную полигональную сетку (wireframe) и измеряя толщину роговицы в микронах.
+        </p>
+        <div class="metrics-row">
+          <div class="metric">
+            <div class="m-label">Толщина в центре</div>
+            <div class="m-val">535 мкм</div>
+            <div class="m-desc">Оптическая пахиметрия</div>
+          </div>
+          <div class="metric amber">
+            <div class="m-label">Задняя элевация</div>
+            <div class="m-val">+5 мкм</div>
+            <div class="m-desc">Исключение кератоконуса</div>
+          </div>
+        </div>
+        <div class="hint-bar">Лазерная плоскость в реальном времени подсвечивает срез 3D-сетки</div>
+      </div>
+    </section>
+
+    <!-- SCENE 6 -->
+    <section class="scene-section" data-scene="5">
+      <div class="glass-card">
+        <span class="kicker">Сцена 06 // Фокус найден (Outro)</span>
+        <h2>Торическая 3D-линза и Ясный Фокус</h2>
+        <p class="lead">
+          Перед глазом выстраивается 3D-цилиндрическая линза. Она выравнивает оптическую силу обоих меридианов — циановые и янтарные лучи сходятся в одной яркой точке на сетчатке.
+        </p>
+        <div class="metrics-row">
+          <div class="metric">
+            <div class="m-label">Результирующий фокус</div>
+            <div class="m-val">Точечный (1.0)</div>
+            <div class="m-desc">Коноид Штурма устранен</div>
+          </div>
+          <div class="metric amber">
+            <div class="m-label">Оптический итог</div>
+            <div class="m-val">Четкая сетчатка</div>
+            <div class="m-desc">Полная компенсация</div>
+          </div>
+        </div>
+        <div class="hint-bar">«Ясное видение — результат точной диагностики»</div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bottom Interactive Refractometer Sliders -->
+  <footer class="bottom-hud">
+    <div class="hud-status">
+      <span style="font-family:monospace; font-size:10px; color:var(--cyan);">РЕЖИМ 3D-СЦЕНЫ</span>
+      <strong id="hud-scene-title" style="font-size:13px; color:#fff;">01 // 3D-Модель глаза</strong>
+    </div>
+
+    <div class="ctrl-box">
+      <div class="ctrl-top">
+        <span style="color:#cbd5e1;">Степень астигматизма (Cyl):</span>
+        <strong id="lbl-cyl" style="color:var(--cyan);">-3.50 D</strong>
+      </div>
+      <input id="rng-cyl" type="range" min="0" max="6" step="0.25" value="3.5" />
+    </div>
+
+    <div class="ctrl-box">
+      <div class="ctrl-top">
+        <span style="color:#cbd5e1;">Ось цилиндра (Axis):</span>
+        <strong id="lbl-axis" style="color:var(--amber);">135°</strong>
+      </div>
+      <input id="rng-axis" type="range" min="0" max="180" step="5" value="135" />
+    </div>
+  </footer>
+
+  <!-- SOLID 3D SHADED ENGINE (Zero External Dependencies, Specular Lighting, Z-Sorted Polygons) -->
+  <script>
+    const canvas = document.getElementById('webgl-stage');
+    const ctx = canvas.getContext('2d');
+
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+    let DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+    function resize() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width = W * DPR;
+      canvas.height = H * DPR;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // =====================================================
+    // GLOBAL STATE & CAMERA TARGETS PER SCENE
+    // =====================================================
+    const app = {
+      scene: 0,
+      cyl: 3.5,
+      axis: 135,
+      rotY: -0.35,
+      rotX: 0.18,
+      targetRotY: -0.35,
+      targetRotX: 0.18,
+      camZoom: 1.0,
+      targetZoom: 1.0,
+      // Smooth blend weights for 3D models
+      wEyeGlobe: 1.0,
+      wCutawayRays: 0.0,
+      wHighway3D: 0.0,
+      wTopoDome: 0.0,
+      wLaserScan: 0.0,
+      wToricLens: 0.0
+    };
+
+    const sceneNames = [
+      '01 // 3D-Модель глаза',
+      '02 // Оптический разрез и Лучи',
+      '03 // 3D-Ночной Город (POV)',
+      '04 // 3D-Купол Кератотопографии',
+      '05 // Pentacam Лазерный 3D-срез',
+      '06 // Торическая 3D-Линза'
+    ];
+
+    // =====================================================
+    // 3D MATH & LIGHTING ENGINE (Phong Shading + Z-Sorting)
+    // =====================================================
+    function rotatePoint(x, y, z, rx, ry) {
+      const cy = Math.cos(ry), sy = Math.sin(ry);
+      const x1 = x * cy - z * sy;
+      const z1 = z * cy + x * sy;
+
+      const cx = Math.cos(rx), sx = Math.sin(rx);
+      const y2 = y * cx - z1 * sx;
+      const z2 = z1 * cx + y * sx;
+      return { x: x1, y: y2, z: z2 };
+    }
+
+    function project(pt, centerX, centerY) {
+      const fov = 620 * app.camZoom;
+      const viewerDist = 520;
+      const depth = viewerDist + pt.z;
+      const scale = fov / Math.max(60, depth);
+      return {
+        sx: centerX + pt.x * scale,
+        sy: centerY + pt.y * scale,
+        scale,
+        z: pt.z
+      };
+    }
+
+    function computeFaceNormal(p0, p1, p2) {
+      const ux = p1.x - p0.x, uy = p1.y - p0.y, uz = p1.z - p0.z;
+      const vx = p2.x - p0.x, vy = p2.y - p0.y, vz = p2.z - p0.z;
+      let nx = uy * vz - uz * vy;
+      let ny = uz * vx - ux * vz;
+      let nz = ux * vy - uy * vx;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      return { x: nx / len, y: ny / len, z: nz / len };
+    }
+
+    // Light direction (top-right-front)
+    const LIGHT = { x: 0.45, y: -0.55, z: -0.70 };
+
+    // =====================================================
+    // BUILD SOLID 3D EYEBALL MESH (Sclera, Iris, Pupil, Cornea)
+    // =====================================================
+    function renderSolid3DEye(time, cx, cy, globeWeight, cutawayWeight, lensWeight) {
+      if (globeWeight < 0.02 && cutawayWeight < 0.02) return;
+
+      const faces = [];
+      const LAT_STEPS = 20;
+      const LON_STEPS = 32;
+      const R = 145;
+
+      // Effective astigmatism deformation (drops to 0 when Scene 6 toric lens is placed)
+      const astig = (app.cyl / 6.0) * (1.0 - lensWeight * 0.92);
+      const axisRad = (app.axis * Math.PI) / 180;
+
+      for (let i = 0; i < LAT_STEPS; i++) {
+        // phi from 0 (front pole / cornea apex) to PI (back pole / optic nerve)
+        const phi0 = (i / LAT_STEPS) * Math.PI;
+        const phi1 = ((i + 1) / LAT_STEPS) * Math.PI;
+        const phiMid = (phi0 + phi1) * 0.5;
+
+        for (let j = 0; j < LON_STEPS; j++) {
+          const theta0 = (j / LON_STEPS) * Math.PI * 2;
+          const theta1 = ((j + 1) / LON_STEPS) * Math.PI * 2;
+          const thetaMid = (theta0 + theta1) * 0.5;
+
+          // In Scene 2 & 6 (Cutaway mode), slice open the front half of sclera so internal rays & lens are clearly visible!
+          const isCutawaySlice = cutawayWeight > 0.35 && Math.sin(thetaMid) > 0.15 && phiMid > 0.42 && phiMid < 2.65;
+          if (isCutawaySlice) continue;
+
+          function getEyeVertex(phi, theta) {
+            let rad = R;
+            // Protruding Corneal Dome at front (phi < 0.52)
+            if (phi < 0.52) {
+              const bulge = Math.cos((phi / 0.52) * (Math.PI * 0.5)) * 26;
+              rad += bulge;
+            }
+            let vx = -Math.cos(phi) * rad; // Front of eye points toward -X in profile, or rotate so front faces viewer
+            let vy = Math.sin(phi) * Math.sin(theta) * rad;
+            let vz = Math.sin(phi) * Math.cos(theta) * rad;
+
+            // Apply astigmatic toric squeeze to the corneal/anterior region
+            if (phi < 0.75) {
+              const toricFactor = Math.cos(2 * (theta - axisRad)) * astig * 0.22;
+              vy *= (1 + toricFactor);
+              vz *= (1 - toricFactor);
+            }
+            return rotatePoint(vx, vy, vz, app.rotX, app.rotY);
+          }
+
+          const v0 = getEyeVertex(phi0, theta0);
+          const v1 = getEyeVertex(phi1, theta0);
+          const v2 = getEyeVertex(phi1, theta1);
+          const v3 = getEyeVertex(phi0, theta1);
+
+          const zAvg = (v0.z + v1.z + v2.z + v3.z) * 0.25;
+          const normal = computeFaceNormal(v0, v1, v2);
+          const diff = Math.max(0.15, normal.x * LIGHT.x + normal.y * LIGHT.y + normal.z * LIGHT.z);
+          const spec = Math.pow(Math.max(0, -normal.z), 16);
+
+          // Determine anatomical zone by phiMid
+          let fillStyle = '';
+          let strokeStyle = 'rgba(0, 243, 255, 0.14)';
+          let alpha = Math.max(globeWeight, cutawayWeight * 0.75);
+
+          if (phiMid < 0.22) {
+            // Dark glowing pupil core + glassy corneal specular highlight
+            const c = Math.round(12 + spec * 180);
+            fillStyle = `rgba(${c}, ${Math.round(c + spec * 60)}, ${Math.round(c + 35)}, ${(alpha * 0.92).toFixed(2)})`;
+            strokeStyle = 'rgba(0, 243, 255, 0.45)';
+          } else if (phiMid < 0.48) {
+            // Cyber-Cyan / Teal Iris Ring
+            const rCol = Math.round(8 + spec * 110);
+            const gCol = Math.round(150 * diff + spec * 90);
+            const bCol = Math.round(210 * diff + spec * 45);
+            fillStyle = `rgba(${rCol}, ${gCol}, ${bCol}, ${(alpha * 0.95).toFixed(2)})`;
+            strokeStyle = 'rgba(0, 243, 255, 0.55)';
+          } else if (phiMid > 2.55) {
+            // Amber/Gold Macula & Retina at back pole
+            const rCol = Math.round(230 * diff);
+            const gCol = Math.round(145 * diff);
+            const bCol = Math.round(25 * diff);
+            fillStyle = `rgba(${rCol}, ${gCol}, ${bCol}, ${(alpha * 0.88).toFixed(2)})`;
+            strokeStyle = 'rgba(255, 170, 0, 0.45)';
+          } else {
+            // Shaded Dark-Glass Sclera Body
+            const base = Math.round(24 + 58 * diff + spec * 45);
+            fillStyle = `rgba(${Math.round(base * 0.75)}, ${Math.round(base * 0.95)}, ${Math.min(255, Math.round(base * 1.35))}, ${(alpha * 0.82).toFixed(2)})`;
+          }
+
+          faces.push({ v0, v1, v2, v3, zAvg, fillStyle, strokeStyle });
+        }
+      }
+
+      // Painter's Algorithm Z-sort (back to front)
+      faces.sort((a, b) => b.zAvg - a.zAvg);
+
+      for (const f of faces) {
+        const p0 = project(f.v0, cx, cy);
+        const p1 = project(f.v1, cx, cy);
+        const p2 = project(f.v2, cx, cy);
+        const p3 = project(f.v3, cx, cy);
+
+        ctx.beginPath();
+        ctx.moveTo(p0.sx, p0.sy);
+        ctx.lineTo(p1.sx, p1.sy);
+        ctx.lineTo(p2.sx, p2.sy);
+        ctx.lineTo(p3.sx, p3.sy);
+        ctx.closePath();
+
+        ctx.fillStyle = f.fillStyle;
+        ctx.fill();
+        ctx.strokeStyle = f.strokeStyle;
+        ctx.lineWidth = 0.75;
+        ctx.stroke();
+      }
+
+      // Internal 3D Crystalline Lens, Corrective Toric Lens & Optical Rays (Scenes 2 & 6)
+      if (cutawayWeight > 0.05) {
+        ctx.save();
+        ctx.globalAlpha = cutawayWeight;
+
+        const corneaX = -162;
+        const retinaX = 142;
+        const toricLensX = -245;
+
+        // 1. Draw Internal 3D Crystalline Lens (Amber/Glass Biconvex 3D Disc)
+        for (let r = 0.35; r <= 1.0; r += 0.325) {
+          ctx.beginPath();
+          ctx.strokeStyle = 'rgba(255, 210, 120, 0.65)';
+          ctx.lineWidth = 1.6;
+          for (let a = 0; a <= Math.PI * 2 + 0.15; a += 0.2) {
+            const pt3 = rotatePoint(-95, Math.sin(a) * 58 * r, Math.cos(a) * 58 * r, app.rotX, app.rotY);
+            const pr = project(pt3, cx, cy);
+            if (a === 0) ctx.moveTo(pr.sx, pr.sy);
+            else ctx.lineTo(pr.sx, pr.sy);
+          }
+          ctx.stroke();
+        }
+
+        // 2. Draw External 3D Toric Corrective Lens in Scene 6
+        if (lensWeight > 0.03) {
+          ctx.save();
+          ctx.globalAlpha = cutawayWeight * lensWeight;
+          const lSegs = 28;
+          for (let s = 0; s < lSegs; s++) {
+            const a0 = (s / lSegs) * Math.PI * 2;
+            const a1 = ((s + 1) / lSegs) * Math.PI * 2;
+            const pA = project(rotatePoint(toricLensX - 8, Math.sin(a0) * 95, Math.cos(a0) * 95, app.rotX, app.rotY), cx, cy);
+            const pB = project(rotatePoint(toricLensX + 8, Math.sin(a0) * 95, Math.cos(a0) * 95, app.rotX, app.rotY), cx, cy);
+            const pC = project(rotatePoint(toricLensX + 8, Math.sin(a1) * 95, Math.cos(a1) * 95, app.rotX, app.rotY), cx, cy);
+            const pD = project(rotatePoint(toricLensX - 8, Math.sin(a1) * 95, Math.cos(a1) * 95, app.rotX, app.rotY), cx, cy);
+
+            ctx.beginPath();
+            ctx.moveTo(pA.sx, pA.sy);
+            ctx.lineTo(pB.sx, pB.sy);
+            ctx.lineTo(pC.sx, pC.sy);
+            ctx.lineTo(pD.sx, pD.sy);
+            ctx.closePath();
+            ctx.fillStyle = 'rgba(0, 243, 255, 0.28)';
+            ctx.fill();
+            ctx.strokeStyle = '#00f3ff';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
+
+        // 3. Draw 3D Laser Beams (Vertical Cyan vs Horizontal Amber)
+        const focalSteepX = retinaX - astig * 155; // Converges early (in front of retina)
+        const focalFlatX  = retinaX + astig * 135; // Converges late (behind retina)
+        const offsets = [-72, -36, 36, 72];
+
+        // Vertical Meridian Beams (Cyan)
+        ctx.strokeStyle = '#00f3ff';
+        ctx.lineWidth = 2.4;
+        offsets.forEach((off) => {
+          const p1 = project(rotatePoint(-320, off, 0, app.rotX, app.rotY), cx, cy);
+          const p2 = project(rotatePoint(corneaX, off * 0.82, 0, app.rotX, app.rotY), cx, cy);
+          const slope = (0 - off * 0.82) / (focalSteepX - corneaX);
+          const endY = off * 0.82 + slope * (retinaX - corneaX);
+          const p3 = project(rotatePoint(retinaX, endY, 0, app.rotX, app.rotY), cx, cy);
+
+          ctx.beginPath();
+          ctx.moveTo(p1.sx, p1.sy);
+          ctx.lineTo(p2.sx, p2.sy);
+          ctx.lineTo(p3.sx, p3.sy);
+          ctx.stroke();
+        });
+
+        // Horizontal Meridian Beams (Amber)
+        ctx.strokeStyle = '#ffaa00';
+        ctx.lineWidth = 2.4;
+        offsets.forEach((off) => {
+          const p1 = project(rotatePoint(-320, 0, off, app.rotX, app.rotY), cx, cy);
+          const p2 = project(rotatePoint(corneaX, 0, off * 0.82, app.rotX, app.rotY), cx, cy);
+          const slope = (0 - off * 0.82) / (focalFlatX - corneaX);
+          const endZ = off * 0.82 + slope * (retinaX - corneaX);
+          const p3 = project(rotatePoint(retinaX, 0, endZ, app.rotX, app.rotY), cx, cy);
+
+          ctx.beginPath();
+          ctx.moveTo(p1.sx, p1.sy);
+          ctx.lineTo(p2.sx, p2.sy);
+          ctx.lineTo(p3.sx, p3.sy);
+          ctx.stroke();
+        });
+
+        // Glowing Focal Spot on Retina Macula
+        const maculaPt = project(rotatePoint(retinaX, 0, 0, app.rotX, app.rotY), cx, cy);
+        const spotRadius = 9 + astig * 34;
+        const grad = ctx.createRadialGradient(maculaPt.sx, maculaPt.sy, 2, maculaPt.sx, maculaPt.sy, spotRadius);
+        grad.addColorStop(0, '#ffffff');
+        grad.addColorStop(0.45, astig < 0.1 ? '#00f3ff' : '#ff1e56');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(maculaPt.sx, maculaPt.sy, spotRadius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.restore();
+      }
+    }
+
+    // =====================================================
+    // SCENE 4 & 5: SOLID 3D KERATOGRAPHY DOME + PENTACAM LASER SLICE
+    // =====================================================
+    function diopterColor(d, alpha) {
+      const t = Math.max(0, Math.min(1, (d - 39.0) / 10.0));
+      let r = 0, g = 0, b = 0;
+      if (t < 0.25) {
+        const k = t * 4;
+        r = 15; g = Math.round(50 + 190 * k); b = 255;
+      } else if (t < 0.5) {
+        const k = (t - 0.25) * 4;
+        r = Math.round(20 * k); g = 240; b = Math.round(255 * (1 - k * 0.75));
+      } else if (t < 0.75) {
+        const k = (t - 0.5) * 4;
+        r = Math.round(20 + 235 * k); g = Math.round(240 - 70 * k); b = 30;
+      } else {
+        const k = (t - 0.75) * 4;
+        r = 255; g = Math.round(170 * (1 - k * 0.82)); b = Math.round(65 * k);
+      }
+      return `rgba(${r},${g},${b},${alpha.toFixed(2)})`;
+    }
+
+    function render3DKeratographyDome(time, cx, cy, topoWeight, laserWeight) {
+      if (topoWeight < 0.02) return;
+
+      const quads = [];
+      const RINGS = 18;
+      const SEGS = 36;
+      const maxR = 165;
+      const axisRad = (app.axis * Math.PI) / 180;
+      const laserSweepY = Math.sin(time * 2.1) * 125;
+
+      for (let r = 0; r < RINGS; r++) {
+        const rn0 = r / RINGS;
+        const rn1 = (r + 1) / RINGS;
+        const rnMid = (rn0 + rn1) * 0.5;
+
+        for (let s = 0; s < SEGS; s++) {
+          const a0 = (s / SEGS) * Math.PI * 2;
+          const a1 = ((s + 1) / SEGS) * Math.PI * 2;
+          const aMid = (a0 + a1) * 0.5;
+
+          const bowTie = Math.cos(2 * (aMid - axisRad));
+          const diopters = 43.0 + bowTie * (rnMid * 1.18) * app.cyl;
+
+          function domeVert(rn, ang) {
+            const rad = rn * maxR;
+            const vx = Math.cos(ang) * rad;
+            const vy = Math.sin(ang) * rad;
+            // 3D Elevation dome + Bow-tie astigmatic ridge
+            const ridge = Math.cos(2 * (ang - axisRad)) * (rn * rn) * app.cyl * 9.5;
+            const vz = -Math.cos(rn * Math.PI * 0.48) * 110 + 45 - ridge;
+            return rotatePoint(vx, vy, vz, app.rotX, app.rotY);
+          }
+
+          const v0 = domeVert(rn0, a0);
+          const v1 = domeVert(rn1, a0);
+          const v2 = domeVert(rn1, a1);
+          const v3 = domeVert(rn0, a1);
+
+          const zAvg = (v0.z + v1.z + v2.z + v3.z) * 0.25;
+          const worldY = Math.sin(aMid) * rnMid * maxR;
+          const isLaserHit = laserWeight > 0.2 && Math.abs(worldY - laserSweepY) < 16;
+
+          quads.push({ v0, v1, v2, v3, zAvg, diopters, isLaserHit });
+        }
+      }
+
+      quads.sort((a, b) => b.zAvg - a.zAvg);
+
+      for (const q of quads) {
+        const p0 = project(q.v0, cx, cy);
+        const p1 = project(q.v1, cx, cy);
+        const p2 = project(q.v2, cx, cy);
+        const p3 = project(q.v3, cx, cy);
+
+        ctx.beginPath();
+        ctx.moveTo(p0.sx, p0.sy);
+        ctx.lineTo(p1.sx, p1.sy);
+        ctx.lineTo(p2.sx, p2.sy);
+        ctx.lineTo(p3.sx, p3.sy);
+        ctx.closePath();
+
+        const fillAlpha = topoWeight * (1.0 - laserWeight * 0.55);
+        ctx.fillStyle = q.isLaserHit
+          ? `rgba(255, 255, 255, ${(topoWeight * 0.95).toFixed(2)})`
+          : diopterColor(q.diopters, fillAlpha);
+        ctx.fill();
+
+        ctx.strokeStyle = q.isLaserHit
+          ? '#00f3ff'
+          : laserWeight > 0.4
+            ? `rgba(0, 243, 255, ${(topoWeight * 0.7).toFixed(2)})`
+            : `rgba(255, 255, 255, ${(topoWeight * 0.22).toFixed(2)})`;
+        ctx.lineWidth = q.isLaserHit ? 2.2 : 0.8;
+        ctx.stroke();
+      }
+
+      // Draw 3D Pentacam Scheimpflug Laser Sheet Plane in Scene 5
+      if (laserWeight > 0.1) {
+        ctx.save();
+        ctx.globalAlpha = laserWeight;
+        const s0 = project(rotatePoint(-180, laserSweepY, -110, app.rotX, app.rotY), cx, cy);
+        const s1 = project(rotatePoint(180, laserSweepY, -110, app.rotX, app.rotY), cx, cy);
+        const s2 = project(rotatePoint(180, laserSweepY, 80, app.rotX, app.rotY), cx, cy);
+        const s3 = project(rotatePoint(-180, laserSweepY, 80, app.rotX, app.rotY), cx, cy);
+
+        ctx.beginPath();
+        ctx.moveTo(s0.sx, s0.sy);
+        ctx.lineTo(s1.sx, s1.sy);
+        ctx.lineTo(s2.sx, s2.sy);
+        ctx.lineTo(s3.sx, s3.sy);
+        ctx.closePath();
+        ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
+        ctx.fill();
+        ctx.strokeStyle = '#00f3ff';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
+
+    // =====================================================
+    // SCENE 3: 3D NIGHT CITY HIGHWAY POV WITH ASTIGMATIC HALO
+    // =====================================================
+    function render3DNightHighway(time, cx, cy, weight) {
+      if (weight < 0.02) return;
+      ctx.save();
+      ctx.globalAlpha = weight;
+
+      const horizonY = cy - 40;
+      const roadSpeed = (time * 180) % 120;
+
+      // 1. 3D Perspective Highway Grid & Buildings
+      ctx.strokeStyle = 'rgba(0, 243, 255, 0.22)';
+      ctx.lineWidth = 1.2;
+
+      // Road lanes converging to horizon
+      [-420, -180, 0, 180, 420].forEach((laneX) => {
+        ctx.beginPath();
+        ctx.moveTo(cx + laneX * 0.08, horizonY);
+        ctx.lineTo(cx + laneX * 1.8, H);
+        ctx.stroke();
+      });
+
+      // Moving road ties
+      for (let z = 1; z <= 10; z++) {
+        const depthZ = z * 120 - roadSpeed;
+        const scale = 320 / Math.max(40, depthZ);
+        const ry = horizonY + 95 * scale;
+        if (ry > horizonY && ry < H) {
+          ctx.beginPath();
+          ctx.moveTo(cx - 260 * scale, ry);
+          ctx.lineTo(cx + 260 * scale, ry);
+          ctx.stroke();
+        }
+      }
+
+      // 2. 3D Cars & Streetlights with Real-Time Astigmatic Starburst Streaks
+      const lights3D = [
+        { lx: -95, ly: 65, lz: 260, col: '#ff1e56', r: 14 },
+        { lx: -55, ly: 65, lz: 260, col: '#ff1e56', r: 14 },
+        { lx: 65,  ly: 65, lz: 380, col: '#ffffff', r: 13 },
+        { lx: 105, ly: 65, lz: 380, col: '#ffffff', r: 13 },
+        { lx: -190, ly: -75, lz: 220, col: '#00f3ff', r: 15 },
+        { lx: 190,  ly: -75, lz: 310, col: '#ffaa00', r: 15 },
+        { lx: 0,    ly: -95, lz: 440, col: '#00ff88', r: 14 }
+      ];
+
+      const k = app.cyl / 6.0;
+      const axisRad = (app.axis * Math.PI) / 180;
+
+      ctx.globalCompositeOperation = 'lighter';
+
+      lights3D.forEach((lt, i) => {
+        const scale = 360 / lt.lz;
+        const sx = cx + lt.lx * scale;
+        const sy = horizonY + lt.ly * scale;
+        const rad = lt.r * (1 + k * 1.1);
+
+        // Glowing core + Diplopia ghost twin
+        const ghostShift = k * 28;
+        [0, ghostShift].forEach((sh, idx) => {
+          if (idx === 1 && k < 0.08) return;
+          const gx = sx + Math.cos(axisRad) * sh;
+          const gy = sy + Math.sin(axisRad) * sh;
+          const g = ctx.createRadialGradient(gx, gy, 1, gx, gy, rad * 1.5);
+          g.addColorStop(0, '#ffffff');
+          g.addColorStop(0.35, lt.col);
+          g.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(gx, gy, rad * 1.5, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        // Directional Astigmatic Spikes
+        if (k > 0.03) {
+          const spikeLen = k * Math.min(W, H) * 0.42;
+          ctx.save();
+          ctx.translate(sx, sy);
+          ctx.rotate(axisRad);
+
+          const sg = ctx.createLinearGradient(-spikeLen, 0, spikeLen, 0);
+          sg.addColorStop(0, 'rgba(0,0,0,0)');
+          sg.addColorStop(0.35, lt.col);
+          sg.addColorStop(0.5, '#ffffff');
+          sg.addColorStop(0.65, lt.col);
+          sg.addColorStop(1, 'rgba(0,0,0,0)');
+
+          ctx.fillStyle = sg;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, spikeLen, Math.max(2.2, rad * 0.22), 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.restore();
+        }
+      });
+
+      ctx.restore();
+    }
+
+    // =====================================================
+    // MAIN RENDER LOOP
+    // =====================================================
+    const startT = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+      const time = (now - startT) * 0.001;
+
+      ctx.clearRect(0, 0, W, H);
+
+      // Position the 3D model in the upper half on mobile, or right side on desktop so cards NEVER cover it
+      const stageCX = W >= 900 ? W * 0.67 : W * 0.5;
+      const stageCY = W >= 900 ? H * 0.46 : H * 0.29;
+
+      // Ambient glowing backdrop behind the 3D model
+      const bgGlow = ctx.createRadialGradient(stageCX, stageCY, 10, stageCX, stageCY, Math.min(W, H) * 0.48);
+      bgGlow.addColorStop(0, 'rgba(0, 243, 255, 0.16)');
+      bgGlow.addColorStop(0.55, 'rgba(255, 170, 0, 0.05)');
+      bgGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+      ctx.fillStyle = bgGlow;
+      ctx.fillRect(0, 0, W, H);
+
+      // Smoothly interpolate scene weights
+      const lerp = (a, b, t = 0.09) => a + (b - a) * t;
+      app.wEyeGlobe    = lerp(app.wEyeGlobe,    app.scene === 0 ? 1 : 0);
+      app.wCutawayRays = lerp(app.wCutawayRays, (app.scene === 1 || app.scene === 5) ? 1 : 0);
+      app.wHighway3D   = lerp(app.wHighway3D,   app.scene === 2 ? 1 : 0);
+      app.wTopoDome    = lerp(app.wTopoDome,    (app.scene === 3 || app.scene === 4) ? 1 : 0);
+      app.wLaserScan   = lerp(app.wLaserScan,   app.scene === 4 ? 1 : 0);
+      app.wToricLens   = lerp(app.wToricLens,   app.scene === 5 ? 1 : 0, 0.07);
+
+      if (!dragging && app.scene === 0) {
+        app.targetRotY += 0.004;
+      }
+
+      app.rotY = lerp(app.rotY, app.targetRotY, 0.12);
+      app.rotX = lerp(app.rotX, app.targetRotX, 0.12);
+      app.camZoom = lerp(app.camZoom, app.targetZoom, 0.1);
+
+      // Render active 3D models
+      renderSolid3DEye(time, stageCX, stageCY, app.wEyeGlobe, app.wCutawayRays, app.wToricLens);
+      render3DKeratographyDome(time, stageCX, stageCY, app.wTopoDome, app.wLaserScan);
+      render3DNightHighway(time, stageCX, stageCY, app.wHighway3D);
+    }
+
+    // =====================================================
+    // TOUCH / MOUSE 3D ORBIT CONTROLS & UI SYNC
+    // =====================================================
+    let dragging = false;
+    let prevX = 0, prevY = 0;
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('button, input, .glass-card, .bottom-hud, .hud-header')) return;
+      dragging = true;
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+
+    window.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dx = (e.clientX - prevX) * 0.009;
+      const dy = (e.clientY - prevY) * 0.009;
+      app.targetRotY += dx;
+      app.targetRotX = Math.max(-1.1, Math.min(1.1, app.targetRotX + dy));
+      prevX = e.clientX;
+      prevY = e.clientY;
+    });
+
+    window.addEventListener('pointerup', () => { dragging = false; });
+
+    // Sliders
+    const rngCyl = document.getElementById('rng-cyl');
+    const rngAxis = document.getElementById('rng-axis');
+
+    function updateReadouts() {
+      const cStr = `-${app.cyl.toFixed(2)} D`;
+      document.getElementById('lbl-cyl').textContent = cStr;
+      document.getElementById('s1-cyl').textContent = cStr;
+      document.getElementById('lbl-axis').textContent = `${app.axis}°`;
+      document.getElementById('s3-axis').textContent = `${app.axis}°`;
+
+      const kSteep = (43.0 + app.cyl * 0.85).toFixed(1);
+      const kFlat  = (43.0 - app.cyl * 0.35).toFixed(1);
+      document.getElementById('s2-steep').textContent = `${kSteep} D`;
+      document.getElementById('s2-flat').textContent = `${kFlat} D`;
+      document.getElementById('s4-kmax').textContent = `${kSteep} D`;
+      document.getElementById('s4-kmin').textContent = `${kFlat} D`;
+      document.getElementById('s3-halo').textContent =
+        app.cyl < 1.0 ? 'Минимальная' : app.cyl < 3.0 ? 'Средняя' : 'Высокая';
+    }
+
+    rngCyl.addEventListener('input', (e) => {
+      app.cyl = parseFloat(e.target.value);
+      updateReadouts();
+    });
+
+    rngAxis.addEventListener('input', (e) => {
+      app.axis = parseInt(e.target.value, 10);
+      updateReadouts();
+    });
+
+    // Scene switching
+    const sections = document.querySelectorAll('.scene-section');
+    const tabs = document.querySelectorAll('.tab-btn');
+
+    function activateScene(idx) {
+      app.scene = idx;
+      sections.forEach((s, i) => s.classList.toggle('active', i === idx));
+      tabs.forEach((b, i) => b.classList.toggle('active', i === idx));
+      document.getElementById('hud-scene-title').textContent = sceneNames[idx];
+
+      // Set optimal 3D camera angles for each scene
+      if (idx === 0) {
+        // 3/4 front view of solid 3D eyeball
+        app.targetRotY = -0.95;
+        app.targetRotX = 0.22;
+        app.targetZoom = 1.05;
+      } else if (idx === 1) {
+        // Side profile cutaway showing cornea, lens, and Sturm's conoid rays
+        app.targetRotY = 0.08;
+        app.targetRotX = 0.16;
+        app.targetZoom = 0.92;
+      } else if (idx === 2) {
+        // Highway POV
+        app.targetRotY = 0;
+        app.targetRotX = 0;
+        app.targetZoom = 1.0;
+      } else if (idx === 3) {
+        // 3D Keratography Dome tilted view
+        app.targetRotY = 0.25;
+        app.targetRotX = -0.65;
+        app.targetZoom = 1.05;
+      } else if (idx === 4) {
+        // Pentacam Laser Slice oblique 3D view
+        app.targetRotY = 0.65;
+        app.targetRotX = -0.55;
+        app.targetZoom = 1.05;
+      } else if (idx === 5) {
+        // Scene 6: Toric 3D Lens + Focused Rays
+        app.targetRotY = -0.12;
+        app.targetRotX = 0.20;
+        app.targetZoom = 0.92;
+      }
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          activateScene(parseInt(entry.target.getAttribute('data-scene'), 10));
+        }
+      });
+    }, { threshold: 0.45 });
+
+    sections.forEach((s) => observer.observe(s));
+
+    function goToScene(idx) {
+      if (sections[idx]) {
+        sections[idx].scrollIntoView({ behavior: 'smooth' });
+      }
+    }
+
+    updateReadouts();
+    activateScene(0);
+    requestAnimationFrame(animate);
+  </script>
+</body>
+</html>

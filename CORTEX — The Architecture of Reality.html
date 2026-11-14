@@ -1,0 +1,262 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>CORTEX — The Architecture of Reality</title>
+<style>
+:root{--fg:#ece9ff;--mut:#9a95c4;--a:#a855f7;--m:#ec4899;color-scheme:dark}
+*{box-sizing:border-box;margin:0}
+body{background:#04030a;color:var(--fg);font-family:Georgia,'Times New Roman',serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
+#sc{height:900vh;pointer-events:none}
+.mono,button{font:11px/1.5 ui-monospace,Menlo,monospace;letter-spacing:.08em;text-transform:uppercase}
+.mono{color:var(--mut)}
+#hud{position:fixed;inset:0;pointer-events:none;z-index:2;padding:env(safe-area-inset-top) 0 env(safe-area-inset-bottom)}
+#bar{position:absolute;top:0;left:0;height:2px;width:0;background:linear-gradient(90deg,var(--a),var(--m))}
+#top{position:absolute;left:max(16px,3vw);top:16px}
+#tools{position:absolute;right:44px;top:12px;pointer-events:auto}
+#nav{position:absolute;right:16px;top:50%;transform:translateY(-50%);display:flex;flex-direction:column;gap:12px;pointer-events:auto}
+#nav i{display:block;width:9px;height:9px;border-radius:50%;border:1px solid var(--mut);cursor:pointer;transition:.3s}
+#nav i.on{background:var(--m);border-color:var(--m);box-shadow:0 0 12px var(--m)}
+button{color:var(--fg);background:#ffffff0d;border:1px solid #ffffff26;border-radius:999px;padding:8px 12px;margin:3px 4px 3px 0;cursor:pointer;transition:.25s}
+button:hover,button:focus-visible{border-color:var(--a)}button.on{background:var(--a);border-color:var(--a)}
+#pn{position:absolute;left:max(16px,3vw);bottom:max(16px,env(safe-area-inset-bottom));width:min(430px,calc(100vw - 56px));max-height:56vh;overflow:auto;padding:18px 20px;background:rgba(14,10,34,.55);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid #a855f740;border-radius:14px;pointer-events:auto}
+.cb{position:absolute;top:8px;right:8px;width:30px;height:30px;padding:0;margin:0;text-align:center;font-size:15px}
+#pn.min{padding:12px 46px 12px 16px;overflow:hidden}
+#pn.min>:not(.mono):not(.cb){display:none}
+h2{font-weight:400;font-size:clamp(26px,4.4vw,42px);line-height:1.05;margin:4px 0 10px}
+#pn p,.info{font-size:14px;line-height:1.6;color:#d3cef5}
+.info{margin-top:10px;padding-top:10px;border-top:1px solid #ffffff1a;min-height:5em}
+.info b{font-weight:600;color:#fff}.ro{margin-top:8px;color:#bfe3ff}
+label{display:block;margin:8px 0}input[type=range]{width:100%;accent-color:var(--m)}
+meter{width:100%;height:8px}
+.hero{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;opacity:0;visibility:hidden}
+.hero.top{place-items:start center;padding-top:14vh}
+.hero h1{font-weight:400;font-size:clamp(54px,15vw,180px);letter-spacing:.2em;margin-right:-.2em;line-height:1}
+.hero .sub{letter-spacing:.5em;font-size:clamp(10px,1.6vw,16px);color:#cdb8ff;margin:14px -.5em 40px 0}
+.hero h3{font-weight:400;font-size:clamp(24px,5vw,58px);line-height:1.1;max-width:16em;margin:0 auto 16px}
+.hero p{color:#bdb7e6;font-size:clamp(14px,1.8vw,19px)}.logo{margin-top:26px;letter-spacing:.7em;font-size:13px;color:var(--mut)}
+.blink{animation:b 2.4s infinite}@keyframes b{50%{opacity:.25}}
+@media(max-width:700px){#top{display:none}#tools{right:36px}}
+@media(prefers-reduced-motion:reduce){.blink{animation:none}}
+</style></head><body>
+<div id="sc"></div>
+<div id="hud"><div id="bar"></div><div id="top" class="mono">CORTEX / <span id="sn"></span></div>
+<div id="tools"><button data-t="r">Restart</button><button data-t="1" aria-label="Zoom in">+</button><button data-t="0" aria-label="Zoom out">−</button></div>
+<div id="nav"></div>
+<div id="h0" class="hero"><div><h1>CORTEX</h1><div class="sub">THE ARCHITECTURE OF REALITY</div><div class="mono blink">Scroll to explore</div></div></div>
+<div id="h7" class="hero top"><div><h3>A DIAGNOSIS DOES NOT DEFINE A PERSON.</h3><p>Understanding the brain is the first step toward understanding the mind.</p><div class="logo">CORTEX</div></div></div>
+<div id="pn"></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+const $=s=>document.querySelector(s),V=(x,y,z)=>new THREE.Vector3(x,y,z),cl=(x,a,b)=>Math.min(b,Math.max(a,x)),sm=t=>t*t*(3-2*t),rnd=(a,b)=>a+Math.random()*(b-a),AD=2;
+let R;try{R=new THREE.WebGLRenderer({antialias:true})}catch(e){document.body.insertAdjacentHTML('afterbegin','<p style="padding:2rem;position:relative;z-index:9">WebGL is not available in this browser.</p>');throw e}
+const mob=matchMedia('(max-width:700px)').matches;
+R.setPixelRatio(Math.min(devicePixelRatio,mob?1.5:2));R.setClearColor(0x04030a);document.body.prepend(R.domElement);
+const SC=new THREE.Scene();SC.fog=new THREE.FogExp2(0x04030a,.005);
+const C=new THREE.PerspectiveCamera(55,1,.1,700);
+SC.add(new THREE.AmbientLight(0x7766bb,.8));
+const dl=new THREE.DirectionalLight(0xffffff,.9);dl.position.set(1,2,3);SC.add(dl);
+const dl2=new THREE.DirectionalLight(0xec4899,.6);dl2.position.set(-2,-1,-2);SC.add(dl2);
+const ST={hot:-1,dom:-1,path:-1,alt:0,net:0,drug:0,occ:0,exc:.5,inh:.5};
+let T=0,p=0,tp=0,si=0,fw=0,zoom=1,tz=1,asp=1,ry=0,try_=0;const M={x:0,y:0},tmp=V(0,0,0);
+
+/* ---------- BRAIN: particles + fresnel shell + structures ---------- */
+const B=new THREE.Group();SC.add(B);
+function bp(d,o){const r=1+.05*Math.sin(d.x*9+d.z*7)*Math.sin(d.y*8+d.z*5)+.035*Math.sin(d.z*14+d.x*6);
+let x=d.x*8.2*r,y=d.y*6*r*(d.y<0?.72:1),z=d.z*10.5*r;if(d.y>0)x+=(d.x<0?-1:1)*.9*Math.exp(-d.x*d.x*40);return o.set(x,y,z)}
+const N=mob?5000:10000,pp=new Float32Array(N*3),pa=new Float32Array(N);
+for(let i=0;i<N;i++){const d=V(rnd(-1,1)+rnd(-1,1),rnd(-1,1)+rnd(-1,1),rnd(-1,1)+rnd(-1,1)).normalize();bp(d,tmp).multiplyScalar(Math.random()<.75?1:rnd(.3,.95)).toArray(pp,i*3);pa[i]=Math.random()}
+const U={t:{value:0},sc:{value:0},al:{value:1},px:{value:R.getPixelRatio()},m:{value:V(99,99,99)}};
+const pg=new THREE.BufferGeometry();pg.setAttribute('position',new THREE.BufferAttribute(pp,3));pg.setAttribute('a',new THREE.BufferAttribute(pa,1));
+const bpts=new THREE.Points(pg,new THREE.ShaderMaterial({uniforms:U,transparent:true,depthWrite:false,blending:AD,
+vertexShader:`attribute float a;uniform float t,sc,al,px;uniform vec3 m;varying float v,h;void main(){vec3 p=position;vec3 q=p-m;p+=normalize(q)*smoothstep(4.,0.,length(q))*1.5;
+p+=sc*(normalize(position)*(12.+a*40.)+vec3(sin(t+a*20.),cos(t*.8+a*9.),sin(t*.6+a*5.))*3.);p+=.12*vec3(sin(t+a*50.+p.y),cos(t*.9+a*30.),sin(t*.7+a*70.));
+vec4 mv=modelViewMatrix*vec4(p,1.);gl_Position=projectionMatrix*mv;gl_PointSize=px*(.9+a)*90./-mv.z;v=a;h=al*(1.-sc*.6);}`,
+fragmentShader:`varying float v,h;void main(){float d=length(gl_PointCoord-.5);if(d>.5)discard;float f=smoothstep(.5,0.,d);gl_FragColor=vec4(mix(vec3(.5,.2,1.),vec3(.8,.9,1.),v*v)*f*h,f*h);}`}));
+bpts.frustumCulled=false;B.add(bpts);
+const sg=new THREE.IcosahedronGeometry(1,4),sp=sg.attributes.position;
+for(let i=0;i<sp.count;i++){tmp.fromBufferAttribute(sp,i).normalize();bp(tmp,tmp).multiplyScalar(.98);sp.setXYZ(i,tmp.x,tmp.y,tmp.z)}sg.computeVertexNormals();
+const SU={a:{value:.5}};
+B.add(new THREE.Mesh(sg,new THREE.ShaderMaterial({uniforms:SU,transparent:true,depthWrite:false,blending:AD,
+vertexShader:`varying vec3 n,v;void main(){n=normalMatrix*normal;vec4 mv=modelViewMatrix*vec4(position,1.);v=-mv.xyz;gl_Position=projectionMatrix*mv;}`,
+fragmentShader:`uniform float a;varying vec3 n,v;void main(){float f=pow(1.-abs(dot(normalize(n),normalize(v))),2.2);gl_FragColor=vec4(vec3(.45,.25,.95)*f*a*1.6,f*a);}`})));
+
+const SD=[
+['Prefrontal Cortex','Frontal lobe, behind the forehead.','Working memory, planning, cognitive control. Altered prefrontal activity and reduced cortical dopamine signalling are linked to cognitive and negative symptoms.'],
+['Thalamus','Midline, above the brainstem.','Relays sensory and motor signals to the cortex and gates what reaches awareness. Thalamo-cortical circuits are implicated in sensory filtering and salience.'],
+['Hippocampus','Medial temporal lobe.','Memory formation and contextual processing. Group-level studies report reduced average volume and altered activity; individuals vary widely.'],
+['Basal Ganglia','Deep nuclei incl. the striatum.','Action selection, habit and reward learning. Striatal dopamine synthesis capacity is elevated on average in psychosis.'],
+['Amygdala','Medial temporal lobe, in front of the hippocampus.','Emotional salience and threat processing; contributes to how significance is assigned to experiences.']];
+const SG=SD.map((_,i)=>{const g=new THREE.Group(),m=new THREE.MeshPhongMaterial({color:0x4a3fb0,emissive:0x1c1066,transparent:true,opacity:.8,shininess:60});g.userData={id:i,m};B.add(g);return g});
+const ell=(g,x,y,z,a,b,c)=>{const o=new THREE.Mesh(new THREE.SphereGeometry(1,20,14),g.userData.m);o.position.set(x,y,z);o.scale.set(a,b,c);g.add(o)};
+ell(SG[0],0,2.2,8,4.4,3,2.2);
+[1,-1].forEach(s=>{ell(SG[1],1.1*s,.4,-.5,.9,.8,1.3);ell(SG[3],2.7*s,.9,2,1.6,1.6,2.2);ell(SG[4],3.8*s,-3.3,2.6,.9,.9,.9);
+SG[2].add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(3*s,-1.2,-5.5),V(4.3*s,-2.4,-3),V(4.4*s,-3,-.5),V(3.6*s,-3.3,1.2)]),20,.5,8),SG[2].userData.m))});
+const FC=[V(0,2.2,8),V(0,.4,-.5),V(0,-2.5,-2),V(0,.9,2),V(0,-3.3,2.6)];
+
+/* ---------- DOPAMINE PATHWAYS ---------- */
+const PD=[['Mesolimbic',0xff4fd8,[[0,-3,-3],[.5,-2,0],[1.2,-1,3],[1.5,-.5,4.2]],'Ventral tegmental area → nucleus accumbens (ventral striatum).','Reward and motivational salience.','Elevated striatal dopamine synthesis and release is linked to psychotic (positive) symptoms.'],
+['Mesocortical',0x7fd4ff,[[0,-3,-3],[.3,0,0],[.6,2,4],[.8,3,8]],'Ventral tegmental area → prefrontal cortex.','Working memory, motivation, cognitive control.','Reduced prefrontal dopamine signalling is hypothesised to contribute to negative and cognitive symptoms.'],
+['Nigrostriatal',0xffb347,[[.8,-2.8,-2.5],[1.8,-1,-.5],[2.7,1,1.5],[2.8,2,2.5]],'Substantia nigra → dorsal striatum.','Voluntary movement.','Not the main site of dysfunction, but D2 blockade here underlies extrapyramidal side effects.'],
+['Tuberoinfundibular',0x5bf0c0,[[0,-.5,1],[0,-2.5,1.8],[0,-3.8,2.2]],'Hypothalamus → pituitary.','Dopamine inhibits prolactin release.','D2 blockade can raise prolactin, with effects on menstruation, lactation and sexual function.']];
+const PWg=new THREE.Group();B.add(PWg);
+const PW=PD.map(d=>{const cs=[1,-1].map(s=>new THREE.CatmullRomCurve3(d[2].map(q=>V(q[0]*s,q[1],q[2])))),
+tm=new THREE.MeshBasicMaterial({color:d[1],transparent:true,opacity:.4,blending:AD}),pm=new THREE.PointsMaterial({color:d[1],size:.45,transparent:true,blending:AD,depthWrite:false});
+cs.forEach(c=>PWg.add(new THREE.Mesh(new THREE.TubeGeometry(c,24,.06,5),tm)));
+const pts=cs.map(()=>{const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(180),3));const o=new THREE.Points(g,pm);o.frustumCulled=false;PWg.add(o);return o});
+return{cs,tm,pm,pts,n:30,sp:.22,ph:0}});
+
+/* ---------- SYMPTOM DOMAINS ---------- */
+const CG=new THREE.Group();CG.position.set(0,-45,0);SC.add(CG);
+function wire(c,i){const a=c.lg.attributes.position,q=c.pos,m=[36,6,50][i];for(let k=0;k<m;k++){if(i==0){const f=rnd(.3,1.4);a.setXYZ(2*k,0,0,0);a.setXYZ(2*k+1,q[3*k]*f,q[3*k+1]*f,q[3*k+2]*f)}
+else{const u=Math.random()*36|0,v=Math.random()*36|0;a.setXYZ(2*k,q[3*u],q[3*u+1],q[3*u+2]);a.setXYZ(2*k+1,q[3*v],q[3*v+1],q[3*v+2])}}c.lg.setDrawRange(0,m*2);a.needsUpdate=true}
+const CO=[0,1,2].map(i=>{const g=new THREE.Group();g.position.x=(i-1)*13;CG.add(g);const pos=new Float32Array(108);
+for(let k=0;k<36;k++)V(rnd(-1,1),rnd(-1,1),rnd(-1,1)).normalize().multiplyScalar(4).toArray(pos,k*3);
+const col=[0xff4fd8,0x6f7fb0,0x5bf0c0][i],pm=new THREE.PointsMaterial({color:col,size:i==1?.35:.6,transparent:true,blending:AD,depthWrite:false}),pg2=new THREE.BufferGeometry();
+pg2.setAttribute('position',new THREE.BufferAttribute(pos,3));g.add(new THREE.Points(pg2,pm));
+const lm=new THREE.LineBasicMaterial({color:col,transparent:true,blending:AD}),lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(300),3));g.add(new THREE.LineSegments(lg,lm));
+const c={g,pos,pm,lm,lg,pg2,t:0,sc:1};wire(c,i);return c});
+const DOM=[['Positive symptoms','Experiences added to normal function: hallucinations (most often auditory), delusions, disorganised thinking. Not every patient has hallucinations. Typically the domain that responds best to antipsychotics.'],
+['Negative symptoms','Reduced function: diminished emotional expression, loss of motivation (avolition), social withdrawal. Often persistent, with limited response to current medication.'],
+['Cognitive symptoms','Difficulties with attention, working memory, processing speed and executive function. Often present early and strongly affect daily functioning.']];
+
+/* ---------- SYNAPSES ---------- */
+function syn(cx,cy,cz,kind){
+const g=new THREE.Group();g.position.set(cx,cy,cz);SC.add(g);
+const mm=(c,o,e)=>new THREE.MeshPhongMaterial({color:c,emissive:c,emissiveIntensity:e,transparent:true,opacity:o,side:2,shininess:90}),sph=new THREE.SphereGeometry(1,28,18);
+const mk=(geo,m,x,y,z,a,b,c)=>{const o=new THREE.Mesh(geo,m);o.position.set(x,y,z);o.scale.set(a||1,b||1,c||1);g.add(o);return o};
+mk(sph,mm(0x4f5cff,.3,.12),0,5.4,0,7,3.6,5);const postM=mm(0x9b4dca,.38,.1);mk(sph,postM,0,-5.4,0,8,3.6,6);
+const vm=mm(0xbfe3ff,.85,.5),ves=[];for(let i=0;i<16;i++)ves.push(mk(sph,vm,rnd(-4,4),rnd(2.9,4.2),rnd(-2.6,2.6),.5,.5,.5));
+const bm=mm(0xff9a3c,.95,.8),rc=[],ord=[0,5,2,7,4,9,1,6,3,8];
+for(let i=0;i<10;i++){const x=-5.2+(i%5)*2.6,z=i<5?-1.8:1.8,y=-5.4+3.6*Math.sqrt(Math.max(0,1-x*x/64-z*z/36)),m=mm(kind=='glu'?0x37d6ff:0x2dd4a0,.9,.2),r=new THREE.Group();r.position.set(x,y-.1,z);g.add(r);
+const st=new THREE.Mesh(new THREE.CylinderGeometry(.3,.4,1.6,10),m);st.position.y=.8;r.add(st);
+const cap=kind=='glu'?new THREE.Mesh(new THREE.TorusGeometry(.4,.15,8,14),m):new THREE.Mesh(new THREE.SphereGeometry(.5,12,8),m);cap.rotation.x=Math.PI/2;cap.position.y=1.7;r.add(cap);
+const bl=new THREE.Mesh(new THREE.SphereGeometry(.45,10,8),bm);bl.position.y=2.3;bl.scale.setScalar(.001);r.add(bl);rc.push({m,x,z,bl,act:0,o:ord.indexOf(i)})}
+const X=new Float32Array(90),Y=new Float32Array(90).fill(1e3),Z=new Float32Array(90),VY=new Float32Array(90),tpos=new Float32Array(270);
+const tg=new THREE.BufferGeometry();tg.setAttribute('position',new THREE.BufferAttribute(tpos,3));
+const tp_=new THREE.Points(tg,new THREE.PointsMaterial({color:kind=='glu'?0xd8f4ff:0xff7ad9,size:.5,transparent:true,blending:AD,depthWrite:false}));tp_.frustumCulled=false;g.add(tp_);
+let gp,gg;if(kind=='glu'){const am=mm(0xffb347,.5,.3);mk(sph,am,15,4,0,2,2,2);g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3([V(14,3,0),V(11,0,0),V(8.5,-1.5,0),V(6.4,-2.6,0)]),16,.3,8),am));mk(sph,am,6.2,-2.8,0,.8,.8,.8);
+gg=new THREE.BufferGeometry();gg.setAttribute('position',new THREE.BufferAttribute(new Float32Array(120),3));gp=new THREE.Points(gg,new THREE.PointsMaterial({color:0xffc46b,size:.4,transparent:true,blending:AD,depthWrite:false}));gp.frustumCulled=false;g.add(gp)}
+return{g,rc,sig:0,ev:0,base:0,
+u(dt,rate,bpb,occ,inh){const act=Math.round(90*rate),k=Math.round(occ*10);
+rc.forEach(q=>{q.blk=q.o<k;q.bl.scale.setScalar(Math.max(.001,q.bl.scale.x+((q.blk?1:0)-q.bl.scale.x)*.1));q.act*=.94;q.m.emissiveIntensity=.2+q.act*1.5});
+for(let i=0;i<90;i++){if(i>=act){Y[i]=1e3}else{if(Y[i]>900){X[i]=rnd(-4,4);Z[i]=rnd(-2.5,2.5);Y[i]=rnd(1.8,2.3);VY[i]=rnd(.8,1.5)}
+Y[i]-=VY[i]*dt;X[i]+=Math.sin(T*2+i)*.25*dt;
+if(Y[i]<.4){let b=0,bd=1e9;rc.forEach((q,j)=>{const d=(q.x-X[i])**2+(q.z-Z[i])**2;if(d<bd){bd=d;b=j}});const q=rc[b];if(bd<1.6&&!q.blk&&Math.random()<bpb){q.act=1;this.ev++}Y[i]=1e3}}
+tpos[3*i]=X[i];tpos[3*i+1]=Y[i];tpos[3*i+2]=Z[i]}tg.attributes.position.needsUpdate=true;
+ves.forEach((v,i)=>v.position.y+=Math.sin(T*1.5+i)*.003);postM.emissiveIntensity=.1+Math.min(1,this.sig/20)*.6;
+if(gp){const n=Math.round(40*inh),a=gg.attributes.position;for(let i=0;i<40;i++)a.setXYZ(i,i<n?6.2+Math.sin(T*1.3+i*2.1)*1.3:0,i<n?-2.8+Math.cos(T*1.1+i*3.3)*1.1:1e3,i<n?Math.sin(T+i*5.7)*1.2:0);a.needsUpdate=true}}}}
+const s5=syn(60,0,-70,'glu'),s7=syn(60,-10,-230,'da');s7.g.position.y=-10;
+
+/* ---------- NETWORK (cortico-striato-thalamic) ---------- */
+const NG=new THREE.Group();NG.position.set(-60,8,-150);SC.add(NG);
+const nodes=[],rg=[],ed=[];
+const add=(n,f,r)=>{for(let i=0;i<n;i++){nodes.push(f());rg.push(r)}};
+add(80,()=>{const d=V(rnd(-1,1),rnd(.15,1),rnd(-1,1)).normalize().multiplyScalar(13);d.y+=2;return d},0);
+add(24,()=>V(rnd(-2.5,2.5),rnd(-1.5,1.5),rnd(-2,2)),1);
+add(36,()=>V((Math.random()<.5?-1:1)*5+rnd(-2,2),-6+rnd(-2,2),rnd(-2.5,2.5)),2);
+const ix=r=>nodes.map((_,i)=>i).filter(i=>rg[i]==r),Cn=ix(0),Tn=ix(1),Sn=ix(2),rp=a=>a[Math.random()*a.length|0];
+Sn.forEach(s=>{for(let k=0;k<3;k++)ed.push([rp(Cn),s,0]);ed.push([s,rp(Tn),2])});Tn.forEach(t=>{for(let k=0;k<4;k++)ed.push([t,rp(Cn),1])});
+const nor=ed.length;for(let k=0;k<45;k++)ed.push([rp(Sn),rp(Math.random()<.5?Cn:Sn),2]);
+const RC3=[[.66,.33,.97],[.75,.9,1],[.93,.3,.85]];
+function lines(a,b,opa,fixed){const pos=[],col=[];for(let i=a;i<b;i++){const E=ed[i];[E[0],E[1]].forEach(n=>{nodes[n].toArray(pos,pos.length);col.push(...(fixed||RC3[E[2]]))})}
+const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+const m=new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:opa,blending:AD,depthWrite:false});NG.add(new THREE.LineSegments(g,m));return m}
+lines(0,nor,.28);const abm=lines(nor,ed.length,0,RC3[2]);
+{const pos=[],col=[];nodes.forEach((n,i)=>{n.toArray(pos,pos.length);col.push(...RC3[rg[i]])});const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('color',new THREE.Float32BufferAttribute(col,3));
+NG.add(new THREE.Points(g,new THREE.PointsMaterial({size:.7,vertexColors:true,transparent:true,blending:AD,depthWrite:false})))}
+const wts=()=>ed.map((E,i)=>i<nor?(ST.net?[.4,.7,4][E[2]]:1):(ST.net?2.5:0));let W=wts();
+const pick=()=>{let t=0;W.forEach(w=>t+=w);let r=Math.random()*t;for(let i=0;i<W.length;i++){r-=W[i];if(r<=0)return i}return 0};
+const PN_=150,pe=Array.from({length:PN_},pick),pt=Array.from({length:PN_},Math.random),ppos=new Float32Array(PN_*3),cnt=[1,1,1],pgm=new THREE.BufferGeometry();
+pgm.setAttribute('position',new THREE.BufferAttribute(ppos,3));const pul=new THREE.Points(pgm,new THREE.PointsMaterial({color:0xeaf6ff,size:.6,transparent:true,blending:AD,depthWrite:false}));pul.frustumCulled=false;NG.add(pul);
+
+/* stars */
+{const n=1500,a=new Float32Array(n*3);for(let i=0;i<n;i++){a[3*i]=rnd(-250,250);a[3*i+1]=rnd(-250,250);a[3*i+2]=rnd(-330,100)}
+const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(a,3));SC.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x8878d8,size:.6,transparent:true,opacity:.6,depthWrite:false})))}
+
+/* ---------- CAMERA PATH ---------- */
+const K=[[V(0,0,62),V(0,0,0)],[V(0,2,34),V(0,0,0)],[V(0,-45,30),V(0,-45,0)],[V(-21,5,22),V(0,0,0)],[V(60,0,-40),V(60,0,-70)],[V(-60,16,-106),V(-60,8,-150)],[V(60,-10,-200),V(60,-10,-230)],[V(0,3,50),V(0,0,0)]];
+const NM=['The Reality','Neural Architecture','The Three Domains','Dopamine Hypothesis','Glutamate & GABA','Disrupted Connectivity','Pharmacological Intervention','Beyond the Diagnosis'];
+
+/* ---------- UI ---------- */
+const bt=(a,arr)=>arr.map((x,i)=>`<button data-a="${a}" data-v="${i}">${x}</button>`).join('');
+const tg2=(a,x,y)=>`<div>${bt(a,[x,y])}</div>`;
+const PN=[null,
+{b:'Schizophrenia is not a lesion in one place: findings point to altered interactions across distributed circuits. Select a structure here, or click it in the 3D view. Drag to rotate.',c:()=>bt('hot',SD.map(s=>s[0]))},
+{b:'Symptoms cluster into three clinical domains. They are descriptive categories, not three separate brain regions, and no one has every symptom.',c:()=>bt('dom',['Positive','Negative','Cognitive'])},
+{b:'The dopamine hypothesis has evolved: not “too much dopamine everywhere”, but a regional imbalance — likely elevated subcortical signalling with reduced prefrontal signalling. Multiple causes (genetic, developmental, environmental) converge.',c:()=>bt('path',PD.map(d=>d[0]))+tg2('alt','Typical signalling','Altered (hypothesis)')},
+{b:'Glutamate is the main excitatory transmitter, GABA the main inhibitory one; function depends on their balance. Adjust the signals and watch postsynaptic activation.',c:()=>`<label class="mono">Excitatory signal <output id="o_exc">50%</output><input type="range" data-s="exc" min="0" max="100" value="50"></label><label class="mono">Inhibitory signal <output id="o_inh">50%</output><input type="range" data-s="inh" min="0" max="100" value="50"></label><div class="ro mono" id="ro"></div>`,
+i:'<b>Established:</b> E/I balance shapes cortical function; NMDA antagonists (e.g. ketamine) can cause psychosis-like and cognitive effects in healthy people; GABA-interneuron markers are reduced in post-mortem tissue.<br><b>Hypothesis:</b> NMDA hypofunction on inhibitory interneurons causes cortical disinhibition.'},
+{b:'Cortico-striato-thalamic loops integrate information. Hypothesis: altered striatal signalling assigns salience to irrelevant stimuli (aberrant salience) while cortical integration weakens. Educational model, not a patient-specific reconstruction.',c:()=>tg2('net','Typical network','Altered network')+'<div class="ro mono" id="ro"></div>',i:'Violet: cortex · Ice: thalamus · Magenta: striatum. Pulses are routed by region-dependent weights; magenta links appear in the altered state.'},
+{b:'Antipsychotics reduce dopamine D2 receptor signalling. Dopamine (magenta) binds free receptors; antagonist molecules (orange) occupy them. Change occupancy and watch signalling.',c:()=>tg2('drug','Without treatment','With D2 blockade')+'<label class="mono">D2 occupancy <output id="o_occ">0%</output><input type="range" data-s="occ" min="0" max="100" value="0"></label><div class="ro mono" id="ro"></div>',
+i:'Response is generally associated with ~60–80% striatal D2 occupancy; higher occupancy raises the risk of extrapyramidal effects (parkinsonism, akathisia, dystonia) and hyperprolactinaemia. Mostly helps positive symptoms; effects on negative and cognitive symptoms are limited, and many patients respond partially or not at all. Medication works best alongside psychosocial care.'},
+{b:'Schizophrenia has multifactorial origins and varies greatly between people. Most people with the diagnosis are not violent, and recovery and meaningful lives are common with support. This is an educational visualisation, not medical advice.',c:()=>'<div class="info"><b>Sources</b><br>WHO — Schizophrenia (fact sheet)<br>NIMH — Schizophrenia<br>Nature Reviews Neurology — Schizophrenia: from neurochemistry to circuits, symptoms and treatments</div>'}];
+const pn=$('#pn');let mini=false;
+function build(){pn.classList.toggle('min',mini);pn.innerHTML=`<button class="cb" data-t="c" aria-label="Collapse or expand panel">${mini?'+':'−'}</button><div class="mono">${String(si+1).padStart(2,'0')} / 08 · ${NM[si]}</div><h2>${NM[si]}</h2><p>${PN[si].b}</p>${PN[si].c()}${si==7?'':'<div class="info" id="info"></div>'}`;
+gsap.fromTo(pn,{y:24,autoAlpha:0},{y:0,autoAlpha:1,duration:.7,ease:'power3.out'});info();sync()}
+function info(){const e=$('#info');if(!e)return;let h=PN[si].i||'';
+if(si==1)h=ST.hot<0?'Select a structure to focus the camera on it.':`<b>${SD[ST.hot][0]}</b> — ${SD[ST.hot][1]}<br>${SD[ST.hot][2]}<br><span class="mono">Group-level findings; individuals vary.</span>`;
+if(si==2)h=(ST.dom<0?'Select a domain.':`<b>${DOM[ST.dom][0]}</b><br>${DOM[ST.dom][1]}`)+'<br><span class="mono">Domains overlap and involve distributed circuits.</span>';
+if(si==3){const d=PD[ST.path];h=(d?`<b>${d[0]}</b> — ${d[3]}<br><i>Role:</i> ${d[4]}<br><i>Clinical relevance:</i> ${d[5]}`:'Select a pathway to highlight its route.')+(ST.alt?'<br><span class="mono">Altered: more mesolimbic signalling, less mesocortical. Illustrative, not global excess.</span>':'')}
+e.innerHTML=h}
+function sync(){document.querySelectorAll('[data-a]').forEach(b=>b.classList.toggle('on',ST[b.dataset.a]==+b.dataset.v));
+[['exc'],['inh'],['occ']].forEach(([k])=>{const o=$('#o_'+k);if(o)o.textContent=Math.round(ST[k]*100)+'%'})}
+function act(a,v){if(['hot','dom','path'].includes(a)&&ST[a]==v)v=-1;ST[a]=v;
+if(a=='drug'){ST.occ=v?.7:0;const s=$('[data-s=occ]');if(s)s.value=ST.occ*100}if(a=='net')W=wts();info();sync()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(b)act(b.dataset.a,+b.dataset.v);const t=e.target.closest('[data-t]');if(t)tool(t.dataset.t)});
+document.addEventListener('input',e=>{const s=e.target.dataset.s;if(!s)return;ST[s]=e.target.value/100;if(s=='occ')ST.drug=ST.occ>.05?1:0;sync()});
+function jump(i){scrollTo({top:i/7*(document.documentElement.scrollHeight-innerHeight),behavior:'smooth'})}
+function tool(t){if(t=='c'){mini=!mini;pn.classList.toggle('min',mini);$('.cb').textContent=mini?'+':'−';return}if(t=='r'){Object.assign(ST,{hot:-1,dom:-1,path:-1,alt:0,net:0,drug:0,occ:0,exc:.5,inh:.5});W=wts();try_=0;tz=1;if(si)build();jump(0)}else tz=cl(tz*(t=='1'?.8:1.25),.45,1.6)}
+const nav=$('#nav');NM.forEach((n,i)=>{const d=document.createElement('i');d.title=n;d.onclick=()=>jump(i);nav.appendChild(d)});
+
+/* ---------- INPUT ---------- */
+const RCs=new THREE.Raycaster(),hs=SG.flatMap(g=>g.children);let dn=0,sx=0,mv=0;
+addEventListener('pointerdown',e=>{if(e.target!==R.domElement)return;dn=1;sx=e.clientX;mv=0});
+addEventListener('pointermove',e=>{M.x=e.clientX/innerWidth*2-1;M.y=-(e.clientY/innerHeight*2-1);if(dn){const dx=e.clientX-sx;mv+=Math.abs(dx);try_+=dx*.008;sx=e.clientX}});
+addEventListener('pointerup',e=>{if(dn&&mv<6&&si==1){RCs.setFromCamera({x:M.x,y:M.y},C);const h=RCs.intersectObjects(hs)[0];if(h)act('hot',h.object.parent.userData.id)}dn=0});
+addEventListener('pointercancel',()=>dn=0);
+function rs(){R.setSize(innerWidth,innerHeight);C.aspect=innerWidth/innerHeight;asp=C.aspect<1?1+(1-C.aspect)*.9:1;C.updateProjectionMatrix()}addEventListener('resize',rs);rs();
+gsap.registerPlugin(ScrollTrigger);
+ScrollTrigger.create({start:0,end:'max',onUpdate:s=>{tp=s.progress*7;$('#bar').style.width=s.progress*100+'%'}});
+
+/* ---------- LOOP ---------- */
+const lk=V(0,0,0),lp=V(0,0,0),setW=(o,w)=>{o.visible=w>.01;o.traverse(c=>{const m=c.material;if(m&&!m.isShaderMaterial){if(m.userData.bo==null)m.userData.bo=m.opacity;m.opacity=m.userData.bo*w}})};
+let tick=0,last=performance.now(),shown=-1;
+function ro(){const e=$('#ro');if(!e)return;
+if(si==4){const r=ST.exc/(ST.inh+.001),s=r>2.5?'Hyperexcitable (disinhibited)':r<.8?'Suppressed':'Balanced';e.innerHTML=`Glutamate release ${Math.round(ST.exc*100)}% · GABA tone ${Math.round(ST.inh*100)}%<br>Postsynaptic activations: ${s5.sig.toFixed(1)}/s<br>Network state: ${s}`}
+if(si==5){const t=cnt[0]+cnt[1]+cnt[2];e.innerHTML=`Pulse share — Cortex ${Math.round(cnt[0]/t*100)}% · Thalamus ${Math.round(cnt[1]/t*100)}% · Striatum ${Math.round(cnt[2]/t*100)}%`}
+if(si==6){const rel=s7.base>0?cl(s7.sig/s7.base*100,0,100):100;e.innerHTML=`D2 occupancy ${Math.round(ST.occ*100)}% · free receptors ${10-Math.round(ST.occ*10)}/10<br>Dopamine signalling: ${Math.round(rel)}% of baseline<meter min="0" max="100" value="${rel}"></meter>${ST.occ>.8?'<br>High occupancy: higher risk of extrapyramidal effects.':ST.occ>=.6?'<br>Typical therapeutic range (~60–80%).':ST.occ>.05?'<br>Below typical therapeutic occupancy.':''}`}}
+function frame(now){requestAnimationFrame(frame);const dt=Math.min(.05,(now-last)/1e3);last=now;T+=dt;
+p+=(tp-p)*Math.min(1,dt*4);ry+=(try_-ry)*.1;zoom+=(tz-zoom)*.08;
+const ns=Math.round(p);if(ns!=shown){shown=ns;si=ns;$('#sn').textContent=NM[si];[...nav.children].forEach((d,i)=>d.classList.toggle('on',i==si));
+gsap.to('#h0',{autoAlpha:si==0?1:0,duration:.8});gsap.to('#h7',{autoAlpha:si==7?1:0,duration:1.2});
+if(si==0)gsap.to(pn,{autoAlpha:0,duration:.4});else build()}
+const i=Math.min(6,Math.floor(p)),f=sm(p>=7?1:p-i);
+lp.lerpVectors(K[i][0],K[i+1][0],f);lk.lerpVectors(K[i][1],K[i+1][1],f);
+B.rotation.y=ry+Math.sin(T*.2)*.25*(1-fw);CG.rotation.y=s5.g.rotation.y=NG.rotation.y=s7.g.rotation.y=ry;NG.rotation.y+=T*.05;B.updateMatrixWorld();
+fw+=((ST.hot>=0&&Math.abs(p-1)<.6?1:0)-fw)*.06;
+if(fw>.003&&ST.hot>=0){lp.lerp(B.localToWorld(FC[ST.hot].clone().add(V(0,3,ST.hot==0?13:15))),fw);lk.lerp(B.localToWorld(FC[ST.hot].clone()),fw)}
+lp.sub(lk).multiplyScalar(zoom*asp).add(lk).add(V(M.x*1.6,M.y*1.1,0));C.position.copy(lp);C.lookAt(lk);
+/* brain */
+const sc=p<4?0:p<5?p-4:p<6.2?1:1-sm(cl((p-6.2)/.8,0,1));U.sc.value=sc;U.t.value=T;U.al.value=p>6?cl(.25+(p-6)*.75,.25,1):cl(1-p*.5,.2,1);SU.a.value=cl(.7-p*.12,0,.5)*(1-sc);
+U.m.value.set(M.x*12,M.y*9,8);
+const w1=cl(1.4-Math.abs(p-1)*1.5,0,1),w3=cl(1.4-Math.abs(p-3)*1.5,0,1),w2=cl(1.5-Math.abs(p-2)*1.5,0,1);
+SG.forEach((g,k)=>{const on=ST.hot==k;g.userData.m.emissive.lerp(on?new THREE.Color(0xec4899):new THREE.Color(0x1c1066),.12);g.scale.setScalar(1+(on?.06*Math.sin(T*4):0));g.userData.m.opacity=(on?.95:.6)*w1;g.visible=w1>.01});
+PWg.visible=w3>.01;
+PW.forEach((q,k)=>{const tn=(ST.alt?[60,10,30,30]:[30,30,30,30])[k],ts=(ST.alt?[1.6,.5,1,1]:[1,1,1,1])[k];q.n+=(tn-q.n)*.05;q.sp+=(.22*ts-q.sp)*.05;q.ph+=dt*q.sp;const n=Math.round(q.n);
+q.cs.forEach((c,j)=>{const a=q.pts[j].geometry.attributes.position;for(let m=0;m<n;m++){c.getPoint((m/n+q.ph)%1,tmp);a.setXYZ(m,tmp.x,tmp.y,tmp.z)}a.needsUpdate=true;q.pts[j].geometry.setDrawRange(0,n)});
+const sel=ST.path<0||ST.path==k;q.tm.opacity=(sel?.5:.08)*w3;q.pm.opacity=(sel?1:.15)*w3});
+/* domains */
+CG.visible=w2>.01;CO.forEach((c,k)=>{c.t-=dt;if(c.t<0){c.t=k==0?.2:.6;wire(c,k)}
+if(k==2){const a=c.pg2.attributes.position;for(let m=0;m<108;m++)a.array[m]=c.pos[m]+Math.sin(T*3+m)*.15;a.needsUpdate=true}
+const s=ST.dom<0?1:ST.dom==k?1.3:.75;c.sc+=(s-c.sc)*.08;c.g.scale.setScalar(c.sc*(k==0?1+.08*Math.sin(T*5):1));c.g.rotation.y+=dt*(.2+k*.1);
+const o=(ST.dom<0||ST.dom==k?1:.3)*w2;c.pm.opacity=(k==1?.4+.15*Math.sin(T):1)*o;c.lm.opacity=(k==1?.15:.6)*o});
+/* synapses & network */
+s5.g.visible=Math.abs(p-4)<1.6;s7.g.visible=Math.abs(p-6)<1.6;NG.visible=Math.abs(p-5)<1.6;
+if(s5.g.visible)s5.u(dt,ST.exc,1-.85*ST.inh,0,ST.inh);
+if(s7.g.visible)s7.u(dt,.75,.85,ST.occ,0);
+if(NG.visible){abm.opacity+=((ST.net?.5:0)-abm.opacity)*.05;for(let k=0;k<PN_;k++){const E=ed[pe[k]];pt[k]+=dt*.8*(ST.net&&E[2]==2?1.4:1);
+if(pt[k]>=1){cnt[E[2]]++;pe[k]=pick();pt[k]=0}const A=nodes[ed[pe[k]][0]],Bn=nodes[ed[pe[k]][1]];tmp.lerpVectors(A,Bn,pt[k]).toArray(ppos,k*3)}pgm.attributes.position.needsUpdate=true}
+tick+=dt;if(tick>.5){tick=0;[s5,s7].forEach(s=>{s.sig+=(s.ev*2-s.sig)*.5;s.ev=0});if(ST.occ<.05)s7.base+=(s7.sig-s7.base)*.3;cnt.forEach((c,k)=>cnt[k]=c*.6+.4);ro()}
+R.render(SC,C)}
+requestAnimationFrame(frame);
+</script></body></html>

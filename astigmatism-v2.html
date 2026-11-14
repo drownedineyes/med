@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Астигматизм: Cyber-Optics</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@300&display=swap">
+<style>
+:root{color-scheme:dark;--void:#020306;--cyan:#00e5ff;--amber:#ffb347;--glass:rgba(255,255,255,.06);--edge:rgba(255,255,255,.16)}
+html,body{margin:0;background:var(--void);color:#eaf9ff;font:300 15px/1.6 'IBM Plex Mono',ui-monospace,monospace}
+#story{height:900vh}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:pan-y}
+.hud{position:fixed;inset:0;pointer-events:none}
+.t{position:absolute;left:clamp(20px,6vw,96px);bottom:calc(clamp(24px,9vh,96px) + env(safe-area-inset-bottom,0px));max-width:min(46ch,86vw);opacity:0;visibility:hidden}
+.t h2{font:700 clamp(30px,5.5vw,76px)/.95 'Space Grotesk',sans-serif;letter-spacing:-.03em;margin:0 0 .5em}
+.t p{margin:0}
+.t1{opacity:1;visibility:visible;left:0;right:0;top:50%;bottom:auto;transform:translateY(-50%);max-width:none;text-align:center}
+.t1 h1{--split:7px;--blur:1.5px;margin:0;padding:0 4vw;font:700 clamp(38px,10vw,170px)/.92 'Space Grotesk',sans-serif;letter-spacing:-.04em;
+ text-shadow:calc(var(--split)*-1) 0 rgba(255,40,80,.75),var(--split) 0 rgba(0,229,255,.75);filter:blur(var(--blur))}
+.t1 small{display:block;margin-top:1.2em;opacity:.6}
+.t6{left:0;right:0;bottom:auto;top:50%;transform:translateY(-50%);max-width:none;text-align:center;color:#02141a}
+.t6 h2{margin:auto;max-width:15ch}
+.glass{background:var(--glass);-webkit-backdrop-filter:blur(18px) saturate(140%);backdrop-filter:blur(18px) saturate(140%);border:1px solid var(--edge);border-radius:18px;padding:14px 18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.18),0 20px 60px rgba(0,229,255,.08)}
+.slider{display:flex;flex-direction:column;gap:10px;width:min(360px,80vw);pointer-events:auto;margin-top:14px}
+.slider input{accent-color:var(--cyan);width:100%}
+.flash{position:fixed;inset:0;background:#fff;opacity:0;pointer-events:none}
+#card{position:fixed;pointer-events:none;width:210px;opacity:0;transform:translateY(-50%) scale(.96);filter:blur(8px);transition:opacity .35s,transform .35s,filter .35s}
+#card.on{opacity:1;transform:translateY(-50%) scale(1);filter:blur(0)}
+#card b{font:700 28px 'Space Grotesk',sans-serif;color:#ff6a78;display:block}
+@media (prefers-reduced-motion:reduce){.t1 h1{--split:0px !important;--blur:0px !important}}
+</style>
+</head>
+<body>
+<main id="story"></main>
+<canvas id="gl"></canvas>
+<div class="hud">
+  <section class="t t1"><h1 id="h1">Астигматизм: Искажение</h1><small>Двигайте курсор / пальцем — и листайте вниз</small></section>
+  <section class="t t2"><h2>Сфера против эллипса</h2><p>Здоровая роговица сводит все меридианы в одну точку. При астигматизме вертикальный меридиан круче — и лучи расходятся: на сетчатке вместо точки — линия.</p></section>
+  <section class="t t3"><h2>Так видит пациент</h2><label class="glass slider"><span id="povlbl">Степень астигматизма: 0.6 D</span><input id="pov" type="range" min="0" max="1" step="0.01" value="0.15"></label></section>
+  <section class="t t4"><h2>Кератотопография</h2><p>Красные зоны — максимальная кривизна. Нажмите на них, чтобы увидеть диоптрии. Потяните, чтобы повернуть.</p></section>
+  <section class="t t5"><h2>Скан за секунды</h2><p>Шаймпфлюг-камера строит оптический срез переднего отрезка и сетку толщины роговицы.</p></section>
+  <section class="t t6"><h2>Ясное видение — результат точной диагностики</h2></section>
+</div>
+<div class="flash" id="flash"></div>
+<div class="glass" id="card"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script>
+/* ============ Общее состояние и скролл (GSAP ScrollTrigger → S.p ∈ [0,1]) ============ */
+const S = { p: 0, pov: 0.15, mx: 0, my: 0 };
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+const seg = (a, b, p) => { const t = clamp((p - a) / (b - a)); return t * t * (3 - 2 * t); };
+gsap.registerPlugin(ScrollTrigger);
+gsap.to(S, { p: 1, ease: 'none', scrollTrigger: { trigger: '#story', start: 'top top', end: 'bottom bottom', scrub: 1 } });
+
+/* ============ Рендер ============ */
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+const R = new THREE.WebGLRenderer({ canvas: document.getElementById('gl'), antialias: true });
+R.setPixelRatio(DPR);
+const sc = new THREE.Scene();
+sc.background = new THREE.Color(0x020306);
+const cam = new THREE.PerspectiveCamera(40, 1, 0.05, 300);
+const U3 = { uTime: { value: 0 }, uAstig: { value: 0 }, uMix: { value: 0 }, uAxis: { value: 0.35 }, uRes: { value: new THREE.Vector2(1, 1) } };
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  R.setSize(w, h, false);
+  cam.aspect = w / h; cam.fov = w / h < 1 ? 58 : 40; cam.updateProjectionMatrix();
+  U3.uRes.value.set(w, h);
+}
+addEventListener('resize', resize); resize();
+
+sc.add(new THREE.AmbientLight(0x88aabb, 0.6));
+const key = new THREE.PointLight(0x9ff4ff, 2.2, 40); key.position.set(4, 3, -5); sc.add(key);
+
+/* ============ СЦЕНА 1: глаз из частиц (центр глаза (0,0,3), передний полюс z=0) ============ */
+const g1 = new THREE.Group(); sc.add(g1);
+const P = [], K = [];
+const push = (x, y, z, k) => { P.push(x, y, z); K.push(k); };
+for (let i = 0; i < 6500; i++) {
+  const yy = 1 - 2 * (i + 0.5) / 6500, r = Math.sqrt(1 - yy * yy), th = i * 2.39996;
+  push(Math.cos(th) * r * 3, Math.sin(th) * r * 3, 3 - yy * 3, 0);
+}
+for (let i = 0; i < 1400; i++) { const rr = 0.35 + Math.random() * 0.9, a = Math.random() * 6.2832; push(Math.cos(a) * rr, Math.sin(a) * rr, 0.9, 1); }
+for (let i = 0; i < 500; i++) { const a = i / 500 * 6.2832; push(Math.cos(a) * 1.5, Math.sin(a) * 1.5, 0.375, 2); }
+const pg = new THREE.BufferGeometry();
+pg.setAttribute('position', new THREE.Float32BufferAttribute(P, 3));
+pg.setAttribute('aKind', new THREE.Float32BufferAttribute(K, 1));
+const U1 = { uTime: { value: 0 }, uAlpha: { value: 1 }, uSize: { value: 0.085 * DPR }, uMouse: { value: new THREE.Vector3(9, 9, 9) } };
+const pm = new THREE.ShaderMaterial({
+  uniforms: U1, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+  vertexShader: `attribute float aKind; uniform float uTime,uSize; uniform vec3 uMouse; varying vec3 vC; varying float vP;
+  void main(){ vec3 p=position; vec3 d=p-uMouse; float r=length(d); float pu=smoothstep(1.7,0.,r);
+    p+=normalize(d+vec3(1e-4))*pu*0.9+vec3(sin(uTime*1.3+p.y*3.),cos(uTime+p.x*3.),0.)*0.02;
+    vC=aKind<.5?vec3(0.,.85,1.):(aKind<1.5?vec3(1.,.7,.28):vec3(.8,1.,1.)); vP=pu;
+    vec4 mv=modelViewMatrix*vec4(p,1.); gl_PointSize=uSize*(300./-mv.z)*(1.+pu*1.5); gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: `uniform float uAlpha; varying vec3 vC; varying float vP;
+  void main(){ float d=length(gl_PointCoord-.5); if(d>.5) discard; gl_FragColor=vec4(vC*(1.+vP),(1.-d*2.)*uAlpha*(.7+vP)); }`
+});
+g1.add(new THREE.Points(pg, pm));
+
+/* ============ СЦЕНА 2 / 6: роговица, лучи, сетчатка, минус-цилиндр ============ */
+const Rr = 3, AP = 1.5, F = 1.6, RZ = F * Rr, SEG = 48, NR = 7, ASTIG = 0.55, EXZ = -1.8;
+const g2 = new THREE.Group(); sc.add(g2);
+const faded = [];  // [material, базовая прозрачность]
+const mk = (m, o) => { m.transparent = true; m.opacity = o; faded.push([m, o]); return m; };
+
+const capG = new THREE.PlaneGeometry(2, 2, SEG, SEG);
+const capBase = new Float32Array(capG.attributes.position.count * 2);
+for (let i = 0; i < capG.attributes.position.count; i++) {
+  const u = capG.attributes.position.getX(i), v = capG.attributes.position.getY(i);
+  capBase[i * 2] = u * Math.sqrt(1 - v * v / 2) * AP; capBase[i * 2 + 1] = v * Math.sqrt(1 - u * u / 2) * AP;
+}
+const capGrp = new THREE.Group(); g2.add(capGrp);
+capGrp.add(new THREE.Mesh(capG, mk(new THREE.MeshPhongMaterial({ color: 0xbff7ff, emissive: 0x003a44, specular: 0xffffff, shininess: 120, side: THREE.DoubleSide, depthWrite: false }), 0.32)));
+capGrp.add(new THREE.Mesh(capG, mk(new THREE.MeshBasicMaterial({ color: 0x00e5ff, wireframe: true }), 0.14)));
+
+const ghost = new THREE.Mesh(new THREE.SphereGeometry(Rr, 40, 28), mk(new THREE.MeshBasicMaterial({ color: 0xffffff, wireframe: true, depthWrite: false }), 0.07));
+ghost.position.z = Rr; g2.add(ghost);
+
+const iris = new THREE.Mesh(new THREE.RingGeometry(0.35, 1.25, 64), mk(new THREE.MeshBasicMaterial({ color: 0xffb347, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }), 0.55)); g2.add(iris);
+const lens = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 24), mk(new THREE.MeshPhongMaterial({ color: 0xffffff, shininess: 90, depthWrite: false }), 0.4)); lens.scale.z = 0.45; g2.add(lens);
+const retina = new THREE.Mesh(new THREE.CircleGeometry(2.2, 64), mk(new THREE.MeshBasicMaterial({ color: 0xffb347, side: THREE.DoubleSide, depthWrite: false }), 0.3)); retina.position.z = RZ + 0.02; g2.add(retina);
+const spot = new THREE.Mesh(new THREE.CircleGeometry(1, 48), mk(new THREE.MeshBasicMaterial({ color: 0x00e5ff, side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false }), 0.95)); spot.position.z = RZ - 0.02; g2.add(spot);
+const dotY = new THREE.Mesh(new THREE.SphereGeometry(0.05, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffffff })); g2.add(dotY);
+const cyl = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.1, 2.4, 48), mk(new THREE.MeshPhongMaterial({ color: 0xbff7ff, emissive: 0x003a44, shininess: 100, depthWrite: false }), 0.5)); cyl.rotation.z = Math.PI / 2; g2.add(cyl);
+
+const rayG = new THREE.BufferGeometry();
+rayG.setAttribute('position', new THREE.BufferAttribute(new Float32Array(2 * NR * 4 * 3), 3));
+const rc = new Float32Array(2 * NR * 4 * 3);
+for (let m = 0; m < 2; m++) for (let r = 0; r < NR; r++) for (let v = 0; v < 4; v++) {
+  const i = ((m * NR + r) * 4 + v) * 3, c = m ? [0.9, 0.98, 1] : [0, 0.9, 1]; rc[i] = c[0]; rc[i + 1] = c[1]; rc[i + 2] = c[2];
+}
+rayG.setAttribute('color', new THREE.BufferAttribute(rc, 3));
+const rays = new THREE.LineSegments(rayG, mk(new THREE.LineBasicMaterial({ vertexColors: true, blending: THREE.AdditiveBlending, depthWrite: false }), 0.9));
+rays.frustumCulled = false; g2.add(rays);
+
+function updateEye(k, ex, corr) {
+  const kx = 1 / Rr, ky = (1 + ASTIG * k) / Rr, py = ky - corr * (ky - kx);
+  const pp = capG.attributes.position;
+  for (let i = 0; i < pp.count; i++) { const x = capBase[i * 2], y = capBase[i * 2 + 1]; pp.setXYZ(i, x, y, (kx * x * x + ky * y * y) / 2); }
+  pp.needsUpdate = true; capG.computeVertexNormals();
+  capGrp.position.z = EXZ * ex;
+  ghost.scale.set(1, 1 / (1 + ASTIG * k), 1);                 // шар → «мяч для регби»
+  iris.position.z = 0.9 - 0.6 * ex; lens.position.z = 1.4 + 0.5 * ex;
+  const kPow = [kx, py], kGeo = [kx, ky], a = rayG.attributes.position; let i = 0;
+  for (let m = 0; m < 2; m++) {
+    const fz = F / kPow[m];
+    for (let r = 0; r < NR; r++) {
+      const h = (r / (NR - 1) * 2 - 1) * AP * 0.92, x = m ? 0 : h, y = m ? h : 0;
+      const zc = EXZ * ex + kGeo[m] * h * h / 2, dz = fz - zc, t = 1.45;
+      a.setXYZ(i++, x, y, -6); a.setXYZ(i++, x, y, zc);
+      a.setXYZ(i++, x, y, zc); a.setXYZ(i++, x - x * t, y - y * t, zc + dz * t);
+    }
+  }
+  a.needsUpdate = true;
+  spot.scale.set(0.07, 0.07 + AP * Math.abs(py / kx - 1) * 0.9, 1);   // точка → линия
+  dotY.position.z = F / py;
+  cyl.visible = corr > 0.01; cyl.scale.setScalar(0.4 + 0.6 * corr); cyl.position.z = -3.2 + 0.8 * corr;
+}
+
+/* ============ СЦЕНА 3: ночной город + астигматическая PSF (шейдер) ============ */
+const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+  uniforms: U3, transparent: true, depthTest: false, depthWrite: false,
+  vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.,1.); }`,
+  fragmentShader: `precision highp float; varying vec2 vUv; uniform float uTime,uAstig,uMix,uAxis; uniform vec2 uRes;
+  float h11(float n){ return fract(sin(n*127.1)*43758.5453123); }
+  float psf(vec2 d,float size,float a,float st){
+    float ca=cos(uAxis),sa=sin(uAxis); vec2 q=vec2(ca*d.x+sa*d.y,-sa*d.x+ca*d.y);
+    float core=exp(-dot(d,d)/(size*size)); float L=size*(1.+a*st);
+    float streak=exp(-abs(q.x)/L)*exp(-q.y*q.y/(size*size*1.8))*a;
+    float cr=exp(-abs(q.y)/(L*.28))*exp(-q.x*q.x/(size*size*2.4))*a*.35;
+    float bloom=exp(-length(d)/(size*(2.+a*5.)))*(.10+.25*a);
+    return core*(1.-.55*a)+streak*.9+cr+bloom; }
+  void main(){
+    float asp=uRes.x/uRes.y; vec2 p=(vUv-.5)*vec2(asp,1.); float a=uAstig, hz=.02;
+    vec3 col=vec3(.004,.006,.012)+vec3(.01,.03,.06)*exp(-abs(p.y-hz)*6.);
+    if(p.y>hz){ vec2 c=floor(vec2(p.x*42.,p.y*70.)); float ht=hz+.05+.28*h11(c.x*3.3);
+      float on=step(.8,h11(c.x*13.1+c.y*71.7))*step(p.y,ht);
+      col+=vec3(1.,.62,.22)*on*.35*(1.-.6*a)+vec3(.2,.1,.04)*on*a*.25; }
+    vec3 Ls=vec3(0.);
+    for(int i=0;i<18;i++){ float fi=float(i);
+      float z=fract(h11(fi*3.1)+uTime*(.02+.03*h11(fi))); float dp=mix(.08,1.,z*z);
+      float lane=(h11(fi*7.7)-.5)*1.5; float on=step(.5,h11(fi*1.9));
+      vec3 tint=mix(vec3(1.,.1,.08)*.8,vec3(1.,.93,.8),on); float inten=.6+.8*dp;
+      float size=.004+.012*dp, sep=.004+.05*dp; vec2 base=vec2(lane*dp*asp*.6,hz-dp*.28);
+      for(int s=0;s<2;s++){ vec2 c=base+vec2(s==0?-sep:sep,0.); vec2 d=p-c;
+        vec3 k=vec3(psf(d,size,a,38.),psf(d,size,a,34.),psf(d,size,a,30.));
+        Ls+=k*tint*inten;
+        vec2 dr=vec2(p.x-c.x,(p.y-(c.y-.16*dp))*.25);
+        Ls+=vec3(psf(dr,size,a*.6,20.))*tint*inten*.18*step(p.y,hz); } }
+    col+=Ls; col=1.-exp(-col*1.5);
+    col*=mix(.55,1.,smoothstep(1.2,.2,length(vUv-.5)*1.4));
+    gl_FragColor=vec4(col,uMix); }`
+}));
+quad.frustumCulled = false; quad.renderOrder = 1000; sc.add(quad);
+
+/* ============ СЦЕНА 4 / 5: голограмма карты кривизны ============ */
+const RAD = 2.2, PHI = 0.5, HOT = 46.5, HS = 100;
+const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+function diopters(x, y) {   // синтетическая карта: «бабочка» (демо, не клинические данные)
+  const r = Math.hypot(x, y), th = Math.atan2(y, x), bow = 0.5 * (1 + Math.cos(2 * (th - PHI)));
+  return 43 + 4.8 * bow * sstep(0.02, 0.6, r) + 0.35 * Math.sin(5.1 * x + 1.3) * Math.cos(4.3 * y) * sstep(0.1, 0.8, r) + 0.5 * (1 - sstep(0, 1, r));
+}
+const hAt = (x, y) => 0.9 * (1 - x * x - y * y) + 0.075 * (diopters(x, y) - 43);
+const tg = new THREE.PlaneGeometry(2, 2, HS, HS), tp = tg.attributes.position, Dv = new Float32Array(tp.count);
+for (let i = 0; i < tp.count; i++) {
+  const u = tp.getX(i), v = tp.getY(i), x = u * Math.sqrt(1 - v * v / 2), y = v * Math.sqrt(1 - u * u / 2);
+  Dv[i] = diopters(x, y); tp.setXYZ(i, x * RAD, y * RAD, hAt(x, y));
+}
+tg.setAttribute('aD', new THREE.BufferAttribute(Dv, 1)); tg.computeVertexNormals();
+const U4 = { uTime: { value: 0 }, uReveal: { value: 0 }, uWire: { value: 0 }, uScan: { value: 0 } };
+const holo = new THREE.Mesh(tg, new THREE.ShaderMaterial({
+  uniforms: U4, transparent: true, side: THREE.DoubleSide, depthWrite: false, extensions: { derivatives: true },
+  vertexShader: `attribute float aD; varying float vD; varying vec3 vN,vV,vW; varying vec2 vXY;
+  void main(){ vD=aD; vXY=position.xy; vN=normalize(normalMatrix*normal); vec4 w=modelMatrix*vec4(position,1.); vW=w.xyz;
+    vec4 mv=viewMatrix*w; vV=-mv.xyz; gl_Position=projectionMatrix*mv; }`,
+  fragmentShader: `precision highp float; varying float vD; varying vec3 vN,vV,vW; varying vec2 vXY;
+  uniform float uTime,uReveal,uWire,uScan;
+  vec3 ramp(float t){ vec3 c0=vec3(.106,.231,1.),c1=vec3(0.,.898,1.),c2=vec3(1.,.76,.28),c3=vec3(1.,.176,.24); t=clamp(t,0.,1.);
+    if(t<.33) return mix(c0,c1,t/.33); if(t<.66) return mix(c1,c2,(t-.33)/.33); return mix(c2,c3,(t-.66)/.34); }
+  void main(){
+    vec3 heat=ramp((vD-42.5)/5.5); vec3 n=normalize(vN),v=normalize(vV);
+    float fres=pow(1.-abs(dot(n,v)),2.5);
+    float cv=vD*2.; float w=fwidth(cv); float iso=1.-smoothstep(0.,w*1.4,min(fract(cv),1.-fract(cv)));
+    float sl=.5+.5*sin(vW.y*90.-uTime*3.); float yn=vXY.y/${RAD.toFixed(1)}*.5+.5;
+    float edge=mix(-.08,1.08,uReveal); float vis=1.-smoothstep(edge-.06,edge,yn);
+    float eg=exp(-pow((yn-edge)*30.,2.))*step(.001,uReveal)*(1.-step(.999,uReveal));
+    float fill=mix(.78,.04,uWire);
+    vec3 col=heat*(.72+.28*sl)*fill; col=mix(col,vec3(1.),fres*.35);
+    col+=vec3(0.,.9,1.)*iso*mix(.6,1.4,uWire)+vec3(.8,1.,1.)*eg*1.5;
+    float band=exp(-pow((yn-mix(1.1,-.1,uScan))*14.,2.))*step(.001,uScan)*(1.-step(.999,uScan));
+    col+=vec3(.7,1.,1.)*band*1.6;
+    float al=(fill*.85+iso*.9+fres*.4+band*.8)*vis+eg;
+    gl_FragColor=vec4(col,clamp(al,0.,1.)); }`
+}));
+const g4 = new THREE.Group(); g4.position.set(0, 0, 40); g4.rotation.order = 'YXZ'; sc.add(g4); g4.add(holo);
+const rings = [];
+[PHI, PHI + Math.PI].forEach(th => {
+  const nx = 0.6 * Math.cos(th), ny = 0.6 * Math.sin(th), z = hAt(nx, ny) + 0.1;
+  const dot = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffffff })); dot.position.set(nx * RAD, ny * RAD, z); g4.add(dot);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.12, 0.14, 48), new THREE.MeshBasicMaterial({ color: 0xff2d3d, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  ring.position.copy(dot.position); g4.add(ring); rings.push(ring);
+});
+
+/* ============ Ввод: параллакс, наведение «фокуса» на заголовок, drag 360°, клики ============ */
+const drag = { down: false, x: 0, y: 0, moved: 0, yaw: 0, pitch: 0, v: 0 };
+const ray = new THREE.Raycaster(), plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0), mw = new THREE.Vector3();
+const card = document.getElementById('card'), h1 = document.getElementById('h1');
+let v4on = false;
+addEventListener('pointermove', e => {
+  S.mx = e.clientX / innerWidth * 2 - 1; S.my = -(e.clientY / innerHeight * 2 - 1);
+  if (S.p < 0.1) {
+    gsap.to(h1, { '--split': '0px', '--blur': '0px', duration: 0.25, overwrite: true });
+    gsap.to(h1, { '--split': '7px', '--blur': '1.5px', duration: 1.2, delay: 0.6 });
+  }
+  if (drag.down) {
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+    drag.moved += Math.abs(dx) + Math.abs(dy); drag.v = dx * 0.008; drag.yaw += drag.v;
+    drag.pitch = clamp(drag.pitch + dy * 0.006, -1.4, 1.0, 0);
+  }
+});
+addEventListener('pointerdown', e => { if (v4on && !e.target.closest('input')) { drag.down = true; drag.x = e.clientX; drag.y = e.clientY; drag.moved = 0; } });
+addEventListener('pointerup', e => {
+  const was = drag.down; drag.down = false;
+  if (!was || drag.moved > 5 || !v4on) return;
+  ray.setFromCamera(new THREE.Vector2(e.clientX / innerWidth * 2 - 1, -(e.clientY / innerHeight * 2 - 1)), cam);
+  const hit = ray.intersectObject(holo)[0];
+  if (hit) {
+    const l = g4.worldToLocal(hit.point.clone()), D = diopters(l.x / RAD, l.y / RAD);
+    if (D >= HOT) {
+      card.innerHTML = `<b>${D.toFixed(1)} D</b>Радиус кривизны ${(337.5 / D).toFixed(2)} мм<br><small style="opacity:.7">На ${(D - 43).toFixed(1)} D круче плоского меридиана</small>`;
+      card.style.left = Math.min(e.clientX + 22, innerWidth - 232) + 'px'; card.style.top = e.clientY + 'px'; card.classList.add('on'); return;
+    }
+  }
+  card.classList.remove('on');
+});
+const pov = document.getElementById('pov'), povlbl = document.getElementById('povlbl');
+pov.addEventListener('input', () => { S.pov = +pov.value; povlbl.textContent = 'Степень астигматизма: ' + (S.pov * 4).toFixed(1) + ' D'; });
+
+/* ============ Камера по ключевым кадрам + хореография ============ */
+const CK = [
+  [0, [0, 0, -9], [0, 0, 2]], [.2, [5.5, 3, -3.5], [0, 0, 2.6]], [.36, [5.5, 3, -3.5], [0, 0, 2.6]],
+  [.44, [0, 0, -5], [0, 0, 6]], [.5, [0, 0, 2.6], [0, 0, 8]], [.62, [0, 0, 2.6], [0, 0, 8]],
+  [.64, [0, 8, 52], [0, 0, 40]], [.8, [0, 3.2, 44.6], [0, 0, 40]], [.91, [0, 3.2, 44.6], [0, 0, 40]],
+  [.92, [6, 1.5, -5], [0, 0, 2.6]], [1, [4.2, 1.2, -2.5], [0, 0, 3]]
+];
+const CH = [['.t2', .16, .46], ['.t3', .47, .62], ['.t4', .68, .8], ['.t5', .8, .9]].map(c => [document.querySelector(c[0]), c[1], c[2]]);
+const t1 = document.querySelector('.t1'), t6 = document.querySelector('.t6'), flash = document.getElementById('flash'), cp = [0, 0, 0], cl = [0, 0, 0];
+const lerpA = (a, b, t, o) => { for (let j = 0; j < 3; j++) o[j] = a[j] + (b[j] - a[j]) * t; };
+const tmpA = [0, 0, 0], tmpB = [0, 0, 0];
+
+R.setAnimationLoop(() => {
+  const p = S.p, t = performance.now() / 1000;
+  /* камера */
+  let i = 0; while (i < CK.length - 2 && p > CK[i + 1][0]) i++;
+  const a = CK[i], b = CK[i + 1], tt = seg(a[0], b[0], p);
+  lerpA(a[1], b[1], tt, cp); lerpA(a[2], b[2], tt, cl);
+  cam.position.set(cp[0] + S.mx * 0.22, cp[1] + S.my * 0.14, cp[2]); cam.lookAt(cl[0], cl[1], cl[2]);
+
+  /* значения сцен */
+  const explode = seg(.14, .24, p) - seg(.38, .44, p), k = seg(.24, .36, p), corr = seg(.93, .975, p);
+  const f2 = seg(.1, .18, p);
+  g1.visible = p < 0.25; U1.uAlpha.value = 1 - seg(.14, .22, p); U1.uTime.value = t;
+  g1.rotation.set(-S.my * 0.2, S.mx * 0.25, 0);
+  ray.setFromCamera(new THREE.Vector2(S.mx, S.my), cam);
+  if (ray.ray.intersectPlane(plane, mw)) { U1.uMouse.value.copy(mw); g1.worldToLocal(U1.uMouse.value); }
+
+  g2.visible = (p < 0.625 || p > 0.915) && f2 > 0.01;
+  faded.forEach(([m, o]) => { m.opacity = o * f2; }); dotY.visible = f2 > 0.5;
+  if (g2.visible) updateEye(k, explode, corr);
+
+  const v3 = seg(.42, .5, p) * (1 - seg(.6, .62, p));
+  quad.visible = v3 > 0.01; U3.uMix.value = v3; U3.uTime.value = t; U3.uAstig.value += (S.pov - U3.uAstig.value) * 0.12;
+
+  v4on = p > 0.66 && p < 0.9; g4.visible = p > 0.63 && p < 0.915;
+  U4.uTime.value = t; const rev = seg(.66, .74, p), wire = seg(.84, .9, p);
+  U4.uReveal.value = rev; U4.uScan.value = seg(.78, .86, p); U4.uWire.value = wire;
+  if (!drag.down) { drag.yaw += drag.v; drag.v *= 0.94; }
+  g4.rotation.set(-(0.55 + 0.35 * wire + drag.pitch), -1.6 + 1.8 * rev + drag.yaw, 0);
+  rings.forEach((r, j) => { const ph = (t * 1.2 + j * .5) % 1; r.scale.setScalar(1 + 0.8 * ph); r.material.opacity = 1 - ph; });
+  if (!v4on) card.classList.remove('on');
+
+  /* вспышки и финал */
+  const wash = seg(.965, .99, p);
+  const fl = Math.max(seg(.6, .62, p) * (1 - seg(.645, .67, p)), seg(.895, .91, p) * (1 - seg(.925, .945, p)), wash);
+  flash.style.opacity = fl;
+
+  /* текст */
+  t1.style.opacity = 1 - seg(.03, .09, p); t1.style.visibility = p < 0.1 ? 'visible' : 'hidden';
+  CH.forEach(([el, s, e]) => { const o = seg(s, s + .025, p) * (1 - seg(e - .025, e, p)); el.style.opacity = o; el.style.visibility = o > 0.02 ? 'visible' : 'hidden'; });
+  const o6 = seg(.985, 1, p); t6.style.opacity = o6; t6.style.visibility = o6 > 0.02 ? 'visible' : 'hidden';
+
+  R.render(sc, cam);
+});
+</script>
+</body>
+</html>
