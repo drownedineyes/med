@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ТЭЛА — интерактивная презентация</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+<style>
+  html { scroll-behavior: smooth; }
+  body { font-family: Inter, system-ui, sans-serif; background: #020617; color: #e2e8f0; margin: 0; }
+  #deck { height: 100vh; overflow-y: auto; scroll-snap-type: y mandatory; }
+  section.slide { height: 100vh; scroll-snap-align: start; overflow-y: auto; }
+
+  .reveal { opacity: 0; transform: translateY(24px); transition: opacity .7s ease, transform .7s ease; }
+  .reveal.in { opacity: 1; transform: none; }
+
+  .expand { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .45s ease; }
+  .open .expand { grid-template-rows: 1fr; }
+  .expand > div { overflow: hidden; }
+
+  .card { transition: border-color .4s, box-shadow .4s, transform .3s; }
+  .card:hover { transform: translateY(-4px); }
+  .card.open { border-color: #e11d48; box-shadow: 0 0 30px -8px rgba(225,29,72,.5); }
+
+  .step { transition: all .5s; opacity: .35; border-color: #1e293b; }
+  .step.on { opacity: 1; border-color: #22d3ee; box-shadow: 0 0 25px -5px rgba(34,211,238,.45); }
+  .step.on .dot { background: #22d3ee; }
+
+  .pulse { animation: pulse 2.2s infinite; }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(225,29,72,.5); }
+    70% { box-shadow: 0 0 0 18px rgba(225,29,72,0); }
+    100% { box-shadow: 0 0 0 0 rgba(225,29,72,0); }
+  }
+
+  #dots button { transition: all .3s; }
+  #dots button.act { background: #e11d48; transform: scale(1.4); }
+  .tab-on { background: #0891b2; color: #fff; }
+</style>
+</head>
+<body>
+
+<audio id="bgm" loop preload="auto" src="https://drive.google.com/uc?export=download&id=1hyswU4WH-g3Lmxzedpo3xif_ugj-J39D"></audio>
+
+<div id="soundModal" class="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/90 backdrop-blur-sm px-6">
+  <div class="max-w-sm w-full rounded-2xl border border-slate-800 bg-slate-900 p-8 text-center shadow-2xl">
+    <h2 class="text-xl font-semibold mb-2">Вы хотите открыть презентацию?</h2>
+    <p class="text-sm text-slate-400 mb-6">Включить фоновую музыку «Paper Planes»?</p>
+    <div class="flex flex-col sm:flex-row gap-3">
+      <button id="soundYes" class="flex-1 px-5 py-3 rounded-xl bg-rose-700 hover:bg-rose-600 font-semibold transition">Да</button>
+      <button id="soundNo" class="flex-1 px-5 py-3 rounded-xl border border-slate-700 hover:bg-slate-800 transition">Продолжить без звука</button>
+    </div>
+  </div>
+</div>
+
+<div id="progress" class="fixed top-0 left-0 h-1 bg-gradient-to-r from-cyan-400 to-rose-600 z-50" style="width:0%"></div>
+<nav id="dots" class="fixed right-4 md:right-6 top-1/2 -translate-y-1/2 z-40 flex flex-col gap-3"></nav>
+
+<main id="deck">
+
+  <!-- Слайд 1 -->
+  <section class="slide relative flex items-center justify-center px-6 md:px-20" id="s1">
+    <div class="max-w-3xl text-center">
+      <p class="reveal text-cyan-400 tracking-[0.3em] uppercase text-xs mb-6">Пульмонология · Ангиология · Неотложная помощь</p>
+      <h1 class="reveal text-5xl md:text-7xl font-extrabold tracking-tight leading-tight">Тромбоэмболия<br><span class="text-rose-600">легочной артерии</span></h1>
+      <p class="reveal mt-8 text-lg text-slate-400 max-w-2xl mx-auto">ТЭЛА — острая окклюзия ветвей легочной артерии тромбом, чаще всего занесённым из вен нижних конечностей. Ведущая этиология — тромбоз глубоких вен.</p>
+      <button id="startBtn" class="reveal pulse mt-12 px-8 py-4 rounded-full bg-rose-700 hover:bg-rose-600 font-semibold transition">Начать обзор ↓</button>
+    </div>
+  </section>
+
+  <!-- Слайд 2 -->
+  <section class="slide relative flex items-center justify-center px-6 md:px-20" id="s2">
+    <div class="max-w-5xl w-full">
+      <p class="reveal text-cyan-400 text-xs uppercase tracking-[0.3em] mb-3">Патогенез</p>
+      <h2 class="reveal text-4xl md:text-5xl font-bold mb-3">Триада Вирхова</h2>
+      <p class="reveal text-slate-400 mb-10">Три условия, каждое из которых повышает риск тромбоза. Наведите курсор или нажмите на карточку.</p>
+      <div class="grid md:grid-cols-3 gap-6">
+
+        <div class="reveal card group cursor-pointer rounded-2xl border border-slate-800 bg-slate-900/70 p-6" data-card>
+          <div class="text-rose-500 text-3xl font-bold mb-2">1</div>
+          <h3 class="text-xl font-semibold mb-2">Повреждение эндотелия</h3>
+          <p class="text-sm text-slate-400">Запускает тромбообразование через обнажение субэндотелия.</p>
+          <div class="expand"><div>
+            <ul class="mt-4 text-sm text-slate-300 space-y-2 list-disc pl-5">
+              <li>Травма, переломы костей таза и бедра</li>
+              <li>Операции, особенно ортопедические и абдоминальные</li>
+              <li>Катетеризация центральных вен</li>
+              <li>Воспаление и курение</li>
+            </ul>
+          </div></div>
+        </div>
+
+        <div class="reveal card group cursor-pointer rounded-2xl border border-slate-800 bg-slate-900/70 p-6" data-card>
+          <div class="text-cyan-400 text-3xl font-bold mb-2">2</div>
+          <h3 class="text-xl font-semibold mb-2">Венозный стаз</h3>
+          <p class="text-sm text-slate-400">Замедление кровотока в венах — благоприятная среда для тромба.</p>
+          <div class="expand"><div>
+            <ul class="mt-4 text-sm text-slate-300 space-y-2 list-disc pl-5">
+              <li>Длительная иммобилизация, постельный режим</li>
+              <li>Длительный перелёт или поездка</li>
+              <li>Варикозная болезнь, ожирение</li>
+              <li>Сердечная недостаточность, беременность</li>
+            </ul>
+          </div></div>
+        </div>
+
+        <div class="reveal card group cursor-pointer rounded-2xl border border-slate-800 bg-slate-900/70 p-6" data-card>
+          <div class="text-amber-400 text-3xl font-bold mb-2">3</div>
+          <h3 class="text-xl font-semibold mb-2">Гиперкоагуляция</h3>
+          <p class="text-sm text-slate-400">Повышенная склонность крови к свертыванию.</p>
+          <div class="expand"><div>
+            <ul class="mt-4 text-sm text-slate-300 space-y-2 list-disc pl-5">
+              <li>Онкологические заболевания</li>
+              <li>Наследственные тромбофилии (например, фактор V Лейден)</li>
+              <li>Гормональные контрацептивы, заместительная терапия</li>
+              <li>Антифосфолипидный синдром</li>
+            </ul>
+          </div></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Слайд 3 -->
+  <section class="slide relative flex items-center justify-center px-6 md:px-20" id="s3">
+    <div class="max-w-5xl w-full">
+      <p class="reveal text-cyan-400 text-xs uppercase tracking-[0.3em] mb-3">Патофизиология</p>
+      <h2 class="reveal text-4xl md:text-5xl font-bold mb-3">Каскад событий</h2>
+      <p class="reveal text-slate-400 mb-10">Шаги подсвечиваются по очереди. Нажмите на шаг, чтобы выбрать его.</p>
+      <div class="reveal grid md:grid-cols-4 gap-4" id="cascade">
+        <div class="step rounded-2xl border-2 p-5 cursor-pointer bg-slate-900/70" data-step="0">
+          <div class="dot w-3 h-3 rounded-full bg-slate-600 mb-4"></div>
+          <div class="text-xs text-slate-500 mb-1">Шаг 1</div>
+          <h3 class="font-semibold mb-2">Источник</h3>
+          <p class="text-sm text-slate-400">Тромбоз глубоких вен нижних конечностей. Фрагмент тромба отрывается.</p>
+        </div>
+        <div class="step rounded-2xl border-2 p-5 cursor-pointer bg-slate-900/70" data-step="1">
+          <div class="dot w-3 h-3 rounded-full bg-slate-600 mb-4"></div>
+          <div class="text-xs text-slate-500 mb-1">Шаг 2</div>
+          <h3 class="font-semibold mb-2">Правые отделы сердца</h3>
+          <p class="text-sm text-slate-400">Эмбол по венозному руслу попадает в правое предсердие и желудочек.</p>
+        </div>
+        <div class="step rounded-2xl border-2 p-5 cursor-pointer bg-slate-900/70" data-step="2">
+          <div class="dot w-3 h-3 rounded-full bg-slate-600 mb-4"></div>
+          <div class="text-xs text-slate-500 mb-1">Шаг 3</div>
+          <h3 class="font-semibold mb-2">Окклюзия ЛА</h3>
+          <p class="text-sm text-slate-400">Закупорка ветвей легочной артерии. Нарушение вентиляции и перфузии, рост мертвого пространства.</p>
+        </div>
+        <div class="step rounded-2xl border-2 p-5 cursor-pointer bg-slate-900/70" data-step="3">
+          <div class="dot w-3 h-3 rounded-full bg-slate-600 mb-4"></div>
+          <div class="text-xs text-slate-500 mb-1">Шаг 4</div>
+          <h3 class="font-semibold mb-2">Постнагрузка ПЖ</h3>
+          <p class="text-sm text-slate-400">Резко растет сопротивление малого круга. Правый желудочек дилатируется, возможна ишемия и шок.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Слайд 4 -->
+  <section class="slide relative flex items-center justify-center px-6 md:px-20" id="s4">
+    <div class="max-w-6xl w-full grid md:grid-cols-2 gap-10">
+      <div>
+        <p class="reveal text-cyan-400 text-xs uppercase tracking-[0.3em] mb-3">Клиника и диагностика</p>
+        <h2 class="reveal text-4xl font-bold mb-6">Подозрение и подтверждение</h2>
+        <ul class="reveal space-y-3 text-slate-300 mb-6">
+          <li>• Внезапная одышка, тахикардия, боль в груди</li>
+          <li>• Гипоксемия, кашель, иногда гемоптоэ</li>
+          <li>• Признаки ТГВ: отёк, боль и покраснение голени</li>
+        </ul>
+        <div class="reveal space-y-4">
+          <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h3 class="font-semibold text-cyan-300">D-димер</h3>
+            <p class="text-sm text-slate-400">Высокая чувствительность. Отрицательный результат при низкой вероятности исключает ТЭЛА. Положительный требует визуализации.</p>
+          </div>
+          <div class="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <h3 class="font-semibold text-rose-400">КТ-ангиография легочных артерий</h3>
+            <p class="text-sm text-slate-400">Стандарт визуализации. Выявляет эмбол и оценивает размер и нагрузку правого желудочка.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="reveal rounded-2xl border border-slate-800 bg-slate-900/70 p-6">
+        <h3 class="text-xl font-semibold mb-1">Калькулятор Wells</h3>
+        <p class="text-sm text-slate-400 mb-4">Отметьте признаки, баллы считаются мгновенно.</p>
+        <div class="space-y-2 text-sm" id="wells">
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="3" class="accent-rose-600 mr-2">Клинические признаки ТГВ</span><b class="text-slate-400">3</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="3" class="accent-rose-600 mr-2">ТЭЛА — наиболее вероятный диагноз</span><b class="text-slate-400">3</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="1.5" class="accent-rose-600 mr-2">ЧСС более 100 уд/мин</span><b class="text-slate-400">1.5</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="1.5" class="accent-rose-600 mr-2">Иммобилизация ≥3 дней или операция за 4 недели</span><b class="text-slate-400">1.5</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="1.5" class="accent-rose-600 mr-2">Ранее подтверждённые ТГВ или ТЭЛА</span><b class="text-slate-400">1.5</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="1" class="accent-rose-600 mr-2">Гемоптоэ</span><b class="text-slate-400">1</b></label>
+          <label class="flex justify-between items-center gap-3 p-2 rounded hover:bg-slate-800 cursor-pointer"><span><input type="checkbox" data-w="1" class="accent-rose-600 mr-2">Онкологическое заболевание (активное или лечение за 6 мес.)</span><b class="text-slate-400">1</b></label>
+        </div>
+        <div class="mt-5 flex items-end gap-4">
+          <div class="text-4xl font-extrabold" id="wellsScore">0</div>
+          <div class="pb-1">
+            <div class="text-sm text-slate-400">Вероятность ТЭЛА</div>
+            <div class="font-semibold" id="wellsLevel">Низкая (0–1)</div>
+          </div>
+        </div>
+        <div class="h-40 mt-4"><canvas id="wellsChart"></canvas></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Слайд 5 -->
+  <section class="slide relative flex items-center justify-center px-6 md:px-20" id="s5">
+    <div class="max-w-5xl w-full">
+      <p class="reveal text-cyan-400 text-xs uppercase tracking-[0.3em] mb-3">Тактика</p>
+      <h2 class="reveal text-4xl md:text-5xl font-bold mb-6">Маршрутизация и лечение</h2>
+      <div class="reveal flex flex-col sm:flex-row gap-3 mb-6">
+        <button class="tab px-5 py-3 rounded-xl border border-slate-700 text-left flex-1 transition" data-tab="high">
+          <span class="block font-semibold">Высокий риск</span>
+          <span class="block text-xs opacity-80">Нестабильная гемодинамика</span>
+        </button>
+        <button class="tab px-5 py-3 rounded-xl border border-slate-700 text-left flex-1 transition" data-tab="low">
+          <span class="block font-semibold">Невысокий риск</span>
+          <span class="block text-xs opacity-80">Стабильная гемодинамика</span>
+        </button>
+      </div>
+
+      <div id="panel-high" class="tabpanel rounded-2xl border border-rose-900/60 bg-slate-900/70 p-6 md:p-8">
+        <p class="text-sm text-slate-400 mb-6">Критерий: систолическое АД &lt;90 мм рт. ст. или падение на ≥40 мм рт. ст. дольше 15 минут, не связанное с аритмией, гиповолемией или сепсисом.</p>
+        <ol class="space-y-4">
+          <li class="flex gap-4"><span class="text-rose-500 font-bold">1</span><div><b>Системный тромболизис</b> (например, альтеплаза) — основной метод реперфузии.</div></li>
+          <li class="flex gap-4"><span class="text-rose-500 font-bold">2</span><div>При противопоказаниях к тромболизису — <b>хирургическая эмболэктомия</b> или катетерная тромбэкстракция.</div></li>
+          <li class="flex gap-4"><span class="text-rose-500 font-bold">3</span><div>Немедленная антикоагуляция нефракционированным гепарином и поддержка гемодинамики (при необходимости — вазопрессоры).</div></li>
+        </ol>
+      </div>
+
+      <div id="panel-low" class="tabpanel hidden rounded-2xl border border-cyan-900/60 bg-slate-900/70 p-6 md:p-8">
+        <p class="text-sm text-slate-400 mb-6">Ключевые вопросы: оценка функции правого желудочка (ЭхоКГ, КТ) и уровня тропонина.</p>
+        <div class="grid md:grid-cols-2 gap-4">
+          <div class="rounded-xl bg-slate-950/60 p-4 border border-slate-800">
+            <h3 class="font-semibold text-cyan-300 mb-2">Низкий риск</h3>
+            <p class="text-sm text-slate-300">ПЖ без перегрузки, тропонин в норме. Антикоагулянты: НМГ или прямые оральные антикоагулянты. Возможно амбулаторное лечение при соответствии критериям (например, sPESI).</p>
+          </div>
+          <div class="rounded-xl bg-slate-950/60 p-4 border border-slate-800">
+            <h3 class="font-semibold text-amber-300 mb-2">Промежуточный риск</h3>
+            <p class="text-sm text-slate-300">Дисфункция ПЖ и/или повышен тропонин. Антикоагуляция и наблюдение в стационаре. Спасительный тромболизис при декомпенсации.</p>
+          </div>
+        </div>
+      </div>
+
+      <p class="reveal text-xs text-slate-600 mt-6">Учебный материал, упрощённая схема на основе рекомендаций ESC 2019. Не заменяет клинических решений врача.</p>
+    </div>
+  </section>
+
+</main>
+
+<script>
+(() => {
+  const deck = document.getElementById('deck');
+  const sections = [...document.querySelectorAll('section.slide')];
+  const dots = document.getElementById('dots');
+  const progress = document.getElementById('progress');
+  let current = 0;
+
+  // Dots navigation
+  sections.forEach((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'w-3 h-3 rounded-full bg-slate-600 hover:bg-slate-400';
+    b.setAttribute('aria-label', 'Слайд ' + (i + 1));
+    b.onclick = () => go(i);
+    dots.appendChild(b);
+  });
+  const dotBtns = [...dots.children];
+
+  function go(i) {
+    i = Math.max(0, Math.min(sections.length - 1, i));
+    sections[i].scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // Reveal + active state
+  const io = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting && e.intersectionRatio > 0.55) {
+        current = sections.indexOf(e.target);
+        dotBtns.forEach((d, i) => d.classList.toggle('act', i === current));
+        e.target.querySelectorAll('.reveal').forEach((el, i) => {
+          el.style.transitionDelay = (i * 120) + 'ms';
+          el.classList.add('in');
+        });
+      }
+    });
+  }, { root: deck, threshold: [0.55] });
+  sections.forEach(s => io.observe(s));
+
+  // Progress bar
+  deck.addEventListener('scroll', () => {
+    const max = deck.scrollHeight - deck.clientHeight;
+    progress.style.width = (max > 0 ? (deck.scrollTop / max) * 100 : 0) + '%';
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', e => {
+    if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+    if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); go(current + 1); }
+    if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); go(current - 1); }
+  });
+
+  document.getElementById('startBtn').onclick = () => go(1);
+
+  // Triad cards: hover opens (pointer devices), click pins
+  const hoverOK = window.matchMedia('(hover: hover)').matches;
+  document.querySelectorAll('[data-card]').forEach(card => {
+    let pinned = false;
+    card.addEventListener('click', () => {
+      pinned = !pinned;
+      card.classList.toggle('open', pinned);
+    });
+    if (hoverOK) {
+      card.addEventListener('mouseenter', () => card.classList.add('open'));
+      card.addEventListener('mouseleave', () => { if (!pinned) card.classList.remove('open'); });
+    }
+  });
+
+  // Cascade: auto-highlight, click to select
+  const steps = [...document.querySelectorAll('.step')];
+  let stepIdx = 0, stepTimer = null;
+  function setStep(i) {
+    stepIdx = i;
+    steps.forEach((s, j) => s.classList.toggle('on', j <= i));
+  }
+  function startCascade() {
+    clearInterval(stepTimer);
+    stepTimer = setInterval(() => setStep((stepIdx + 1) % steps.length), 2600);
+  }
+  steps.forEach((s, i) => s.addEventListener('click', () => { setStep(i); startCascade(); }));
+  setStep(0);
+  startCascade();
+
+  // Wells calculator + Chart.js
+  const boxes = [...document.querySelectorAll('[data-w]')];
+  const scoreEl = document.getElementById('wellsScore');
+  const levelEl = document.getElementById('wellsLevel');
+  const ctx = document.getElementById('wellsChart');
+  const chart = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: ['Баллы Wells'], datasets: [{ data: [0], backgroundColor: '#22d3ee', borderRadius: 8, barThickness: 40 }] },
+    options: {
+      indexAxis: 'y',
+      animation: { duration: 500 },
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { min: 0, max: 12.5, ticks: { color: '#94a3b8' }, grid: { color: '#1e293b' } },
+        y: { ticks: { color: '#94a3b8' }, grid: { display: false } }
+      }
+    }
+  });
+
+  function updateWells() {
+    const score = boxes.reduce((sum, b) => sum + (b.checked ? parseFloat(b.dataset.w) : 0), 0);
+    let level, color;
+    if (score <= 1) { level = 'Низкая (0–1)'; color = '#22d3ee'; }
+    else if (score <= 6) { level = 'Средняя (2–6)'; color = '#f59e0b'; }
+    else { level = 'Высокая (>6)'; color = '#e11d48'; }
+    scoreEl.textContent = score;
+    scoreEl.style.color = color;
+    levelEl.textContent = level;
+    chart.data.datasets[0].data = [score];
+    chart.data.datasets[0].backgroundColor = color;
+    chart.update();
+  }
+  boxes.forEach(b => b.addEventListener('change', updateWells));
+  updateWells();
+
+  // Algorithm tabs
+  const tabs = document.querySelectorAll('.tab');
+  function showTab(name) {
+    tabs.forEach(t => t.classList.toggle('tab-on', t.dataset.tab === name));
+    document.querySelectorAll('.tabpanel').forEach(p => p.classList.toggle('hidden', p.id !== 'panel-' + name));
+  }
+  tabs.forEach(t => t.addEventListener('click', () => showTab(t.dataset.tab)));
+  showTab('high');
+
+  // Sound consent modal
+  const bgm = document.getElementById('bgm');
+  const modal = document.getElementById('soundModal');
+  const closeModal = () => modal.classList.add('hidden');
+  document.getElementById('soundYes').addEventListener('click', () => {
+    bgm.volume = 0.4;
+    bgm.play().catch(() => {});
+    closeModal();
+  });
+  document.getElementById('soundNo').addEventListener('click', closeModal);
+})();
+</script>
+</body>
+</html>
