@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ru"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Лёгкие 3D</title>
+<style>
+:root{color-scheme:dark;--n1:#7b61ff;--n2:#3ad8ff;--tx:#e8e6ff;--mu:#9a97c8}
+*{box-sizing:border-box;-webkit-user-select:none;user-select:none}
+html,body{margin:0;height:100%;background:#04020c;color:var(--tx);font-family:-apple-system,"Segoe UI",Roboto,sans-serif;overflow:hidden;overscroll-behavior:none}
+canvas{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+.ui{position:fixed;left:0;right:0;padding:12px 14px;pointer-events:none}
+.top{top:0;padding-top:calc(12px + env(safe-area-inset-top,0px));text-align:center}
+.top h1{margin:0;font-size:1.25rem;text-shadow:0 0 14px var(--n1)}
+.top p{margin:2px 0 0;font-size:.78rem;color:var(--mu)}
+.bot{bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
+.panel{pointer-events:auto;max-width:480px;margin:0 auto 10px;padding:12px 14px;border-radius:14px;background:rgba(14,10,38,.72);border:1px solid rgba(123,97,255,.45);box-shadow:0 0 22px rgba(123,97,255,.25);backdrop-filter:blur(6px)}
+.panel h2{margin:0 0 4px;font-size:1rem;color:var(--n2);text-shadow:0 0 8px var(--n2)}
+.panel p{margin:0;font-size:.85rem;line-height:1.45}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{pointer-events:auto;font:inherit;font-size:.8rem;color:var(--tx);background:rgba(10,6,30,.6);border:1px solid var(--n1);border-radius:999px;padding:8px 13px;box-shadow:0 0 10px rgba(123,97,255,.35)}
+button.on{background:var(--n1);box-shadow:0 0 16px var(--n1)}
+.lb{position:fixed;left:0;top:0;font-size:11px;padding:3px 7px;border-radius:8px;color:#d9f6ff;background:rgba(10,6,30,.55);border:1px solid rgba(58,216,255,.5);text-shadow:0 0 6px var(--n2);white-space:nowrap;pointer-events:auto;will-change:transform}
+</style></head><body>
+<div class="ui top"><h1>Лёгкие 3D</h1><p>Тяните — вращать · щипок или колесо — масштаб · коснитесь органа</p></div>
+<div class="ui bot">
+ <div class="panel" id="panel"></div>
+ <div class="row">
+  <button id="bBr" class="on">Дыхание</button><button id="bAu" class="on">Вращение</button>
+  <button id="bSh" class="on">Лёгкие</button><button id="bBo" class="on">Бронхи</button><button id="bHe" class="on">Сердце</button>
+ </div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const T=THREE,R=(()=>{let s=11;return()=>(s=s*16807%2147483647)/2147483647})();
+const V=(x,y,z)=>new T.Vector3(x,y,z);
+const scene=new T.Scene(),cam=new T.PerspectiveCamera(50,1,.1,500);
+const ren=new T.WebGLRenderer({antialias:true});ren.setPixelRatio(Math.min(devicePixelRatio,2));document.body.prepend(ren.domElement);
+function glowTex(c0,c1){const k=document.createElement("canvas");k.width=k.height=64;const g=k.getContext("2d"),r=g.createRadialGradient(32,32,0,32,32,32);r.addColorStop(0,c0);r.addColorStop(1,c1);g.fillStyle=r;g.fillRect(0,0,64,64);return new T.CanvasTexture(k)}
+const dot=glowTex("rgba(255,255,255,1)","rgba(255,255,255,0)");
+const add={transparent:true,blending:T.AdditiveBlending,depthWrite:false};
+
+/* Космос: звёзды, туманности, пыль, кольца */
+const space=new T.Group();scene.add(space);
+{const n=1800,a=new Float32Array(n*3),c=new Float32Array(n*3),pal=[[1,1,1],[.6,.8,1],[.7,.6,1],[.5,.9,1]];
+ for(let i=0;i<n;i++){const r=70+R()*100,u=R()*6.283,v=Math.acos(2*R()-1);a.set([r*Math.sin(v)*Math.cos(u),r*Math.cos(v),r*Math.sin(v)*Math.sin(u)],i*3);c.set(pal[i%4],i*3)}
+ const g=new T.BufferGeometry();g.setAttribute("position",new T.BufferAttribute(a,3));g.setAttribute("color",new T.BufferAttribute(c,3));
+ space.add(new T.Points(g,new T.PointsMaterial({size:2.4,map:dot,vertexColors:true,...add})));
+ [["rgba(123,97,255,.55)",-90,30,-80],["rgba(58,216,255,.4)",90,-20,-90],["rgba(255,60,170,.35)",20,60,100],["rgba(90,60,255,.5)",-60,-50,90],["rgba(58,216,255,.3)",-110,10,40]].forEach(([c,x,y,z])=>{
+  const s=new T.Sprite(new T.SpriteMaterial({map:glowTex(c,c.replace(/[\d.]+\)$/,"0)")),...add}));s.position.set(x,y,z);s.scale.setScalar(150);space.add(s)});}
+const dust=(()=>{const n=300,a=new Float32Array(n*3);for(let i=0;i<n;i++){a.set([(R()-.5)*18,(R()-.5)*14,(R()-.5)*18],i*3)}
+ const g=new T.BufferGeometry();g.setAttribute("position",new T.BufferAttribute(a,3));const p=new T.Points(g,new T.PointsMaterial({size:.09,map:dot,color:0x9a86ff,...add}));scene.add(p);return p})();
+const rings=[0x7b61ff,0x3ad8ff].map((c,i)=>{const m=new T.Mesh(new T.TorusGeometry(3.4+i*.5,.012,8,180),new T.MeshBasicMaterial({color:c,opacity:.55,...add}));m.rotation.x=1.2+i*.5;scene.add(m);return m});
+
+/* Неоновый материал (френель) */
+function neon(c,c2){return new T.ShaderMaterial({uniforms:{c:{value:new T.Color(c)},d:{value:new T.Color(c2)},b:{value:0}},transparent:true,depthWrite:false,blending:T.AdditiveBlending,side:T.DoubleSide,
+vertexShader:"varying vec3 n;varying vec3 v;void main(){vec4 m=modelViewMatrix*vec4(position,1.);n=normalize(normalMatrix*normal);v=normalize(-m.xyz);gl_Position=projectionMatrix*m;}",
+fragmentShader:"uniform vec3 c;uniform vec3 d;uniform float b;varying vec3 n;varying vec3 v;void main(){float f=pow(1.-abs(dot(n,v)),2.2);gl_FragColor=vec4(mix(c,d,f)*(.3+1.6*f+b),.1+.75*f+b*.3);}"})}
+
+/* Лёгкие */
+function lungGeo(s){const g=new T.SphereGeometry(1,72,56),p=g.attributes.position;
+ for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),med=x*s<0,ap=1-.32*Math.max(0,y)**2;
+  let X=x*.72*ap*(med?.62:1),Y=y*1.2,Z=z*.55*ap*(y<-.6?1+(y+.6)*.5:1);
+  if(s>0&&med)X+=.34*Math.exp(-((y+.35)/.38)**2)*(-x);
+  let k=1+.02*Math.sin(x*9+y*7)*Math.sin(z*8+y*5);
+  k-=.06*Math.exp(-((y+.1-.3*z)/.07)**2);
+  if(s<0)k-=.06*Math.exp(-((y-.45)/.07)**2);
+  p.setXYZ(i,X*k,Y,Z*k)}
+ g.computeVertexNormals();return g}
+const lungs=[],P=[];
+[[-1,"right"],[1,"left"]].forEach(([s,id])=>{const g=lungGeo(s),m=new T.Mesh(g,neon("#5b3dff","#3ad8ff"));m.position.set(s*.85,0,0);m.userData.id=id;
+ m.add(new T.Mesh(g,new T.MeshBasicMaterial({color:0x7b61ff,wireframe:true,opacity:.07,...add})));scene.add(m);lungs.push(m);P.push(m)});
+
+/* Трахея, бронхи, альвеолы */
+const bron=new T.Group(),alvG=new T.Group();scene.add(bron,alvG);
+const bm=new T.MeshBasicMaterial({color:0x3ad8ff,opacity:.85,side:T.DoubleSide,...add}),tm=new T.MeshBasicMaterial({color:0x9a86ff,opacity:.8,side:T.DoubleSide,...add});
+function seg(a,b,r0,r1,id,mat){const d=b.clone().sub(a),m=new T.Mesh(new T.CylinderGeometry(r1,r0,d.length(),8,1,true),mat);
+ m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(V(0,1,0),d.normalize());m.userData.id=id;bron.add(m);P.push(m)}
+seg(V(0,2.3,0),V(0,1,0),.11,.11,"trachea",tm);
+for(let i=0;i<10;i++){const r=new T.Mesh(new T.TorusGeometry(.125,.014,6,20),tm);r.rotation.x=Math.PI/2;r.position.y=1.05+i*.135;r.userData.id="trachea";bron.add(r);P.push(r)}
+const tips=[];
+function grow(pos,dir,len,r,d,cx){const end=pos.clone().addScaledVector(dir,len);seg(pos,end,r,r*.78,"bronchi",bm);
+ if(d===0){tips.push(end);return}
+ for(const s of[-1,1]){const ax=V(R()-.5,R()-.5,R()-.5).cross(dir).normalize(),nd=dir.clone().applyAxisAngle(ax,s*(.4+R()*.4));
+  const e=((end.x-cx)/.62)**2+(end.y/1.1)**2+(end.z/.45)**2;
+  nd.addScaledVector(V(cx-end.x,-end.y*.6,-end.z).normalize(),e>.4?.9:.1).normalize();
+  grow(end,nd,len*.77,r*.78,d-1,cx)}}
+[-1,1].forEach(s=>{const h=V(s*.6,.55,0);seg(V(0,1,0),h,.075,.065,"bronchi",bm);grow(h,V(s*.5,-.85,.05).normalize(),.5,.06,6,s*.85)});
+{const a=new Float32Array(tips.length*14*3);tips.forEach((t,i)=>{for(let j=0;j<14;j++){const u=R()*6.283,v=Math.acos(2*R()-1),r=.03+R()*.08;a.set([t.x+r*Math.sin(v)*Math.cos(u),t.y+r*Math.cos(v),t.z+r*Math.sin(v)*Math.sin(u)],(i*14+j)*3)}});
+ const g=new T.BufferGeometry();g.setAttribute("position",new T.BufferAttribute(a,3));alvG.add(new T.Points(g,new T.PointsMaterial({size:.11,map:dot,color:0xff6ad5,...add})))}
+/* Поток воздуха по трахее */
+const N=70,fp=new Float32Array(N*3),fj=Array.from({length:N},()=>[(R()-.5)*.14,(R()-.5)*.14]);
+const fg=new T.BufferGeometry();fg.setAttribute("position",new T.BufferAttribute(fp,3));
+const flow=new T.Points(fg,new T.PointsMaterial({size:.07,map:dot,color:0xffffff,...add}));scene.add(flow);
+
+/* Сердце */
+const heartM=neon("#ff2f7d","#ffb0d6"),heart=new T.Group();
+{const g=new T.SphereGeometry(1,48,36),p=g.attributes.position;
+ for(let i=0;i<p.count;i++){const x=p.getX(i),y=p.getY(i),z=p.getZ(i),t=(y+1)/2;p.setXYZ(i,x*.5*(.55+.45*t)*(1+.08*Math.sin(y*6)),y*.62,z*.42*(.6+.4*t))}
+ g.computeVertexNormals();const m=new T.Mesh(g,heartM);m.userData.id="heart";heart.add(m);P.push(m);
+ const ao=new T.Mesh(new T.CylinderGeometry(.09,.11,.55,16,1,true),heartM);ao.position.set(-.03,.62,0);ao.rotation.z=.15;ao.userData.id="heart";heart.add(ao);P.push(ao)}
+heart.position.set(.28,-.35,.1);heart.rotation.z=.5;scene.add(heart);
+
+/* Управление камерой */
+let th=.5,ph=1.4,rad=7.5,vth=0,vph=0,auto=true,idle=0;const tgt=V(0,.45,0),ptr=new Map();let down=null,pinch=0;
+function place(){cam.position.set(tgt.x+rad*Math.sin(ph)*Math.sin(th),tgt.y+rad*Math.cos(ph),tgt.z+rad*Math.sin(ph)*Math.cos(th));cam.lookAt(tgt)}
+const cv=ren.domElement;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);ptr.set(e.pointerId,[e.clientX,e.clientY]);down=[e.clientX,e.clientY,performance.now()];idle=0;vth=vph=0;if(ptr.size==2){const[a,b]=[...ptr.values()];pinch=Math.hypot(a[0]-b[0],a[1]-b[1]);down=null}});
+cv.addEventListener("pointermove",e=>{const o=ptr.get(e.pointerId);if(!o)return;idle=0;
+ if(ptr.size==1){vth=-(e.clientX-o[0])*.008;vph=-(e.clientY-o[1])*.008;th+=vth;ph=Math.min(Math.PI-.25,Math.max(.25,ph+vph))}
+ ptr.set(e.pointerId,[e.clientX,e.clientY]);
+ if(ptr.size==2){const[a,b]=[...ptr.values()],d=Math.hypot(a[0]-b[0],a[1]-b[1]);rad=Math.min(16,Math.max(3.5,rad*pinch/d));pinch=d}});
+const up=e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<6&&performance.now()-down[2]<450)pickAt(e);ptr.delete(e.pointerId);down=null};
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",e=>{ptr.delete(e.pointerId);down=null});
+cv.addEventListener("wheel",e=>{e.preventDefault();rad=Math.min(16,Math.max(3.5,rad*(1+e.deltaY*.001)));idle=0},{passive:false});
+
+/* Выбор и описания */
+const info={trachea:["Трахея","Воздухоносная трубка длиной около 10–12 см. Соединяет гортань с бронхами. Стенки укреплены хрящевыми полукольцами, поэтому трубка не спадается."],
+bronchi:["Бронхи и альвеолы","Бронхи ветвятся около 23 раз, как крона дерева, и заканчиваются мельчайшими пузырьками — альвеолами (розовые точки). Их примерно 300–500 миллионов, именно там кислород попадает в кровь."],
+right:["Правое лёгкое","Больше левого, состоит из трёх долей: верхней, средней и нижней. Разделено двумя бороздами — косой и горизонтальной."],
+left:["Левое лёгкое","Меньше правого, две доли и одна борозда. Из-за сердца на нём есть сердечная вырезка."],
+heart:["Сердце","Лежит между лёгкими, верхушкой влево. Через лёгочные сосуды прогоняет кровь, чтобы она получила кислород и отдала углекислый газ."]};
+let sel=null;const panel=document.getElementById("panel");
+function show(){const i=info[sel];panel.innerHTML="<h2></h2><p></p>";panel.firstChild.textContent=i?i[0]:"Выберите часть";panel.lastChild.textContent=i?i[1]:"Коснитесь лёгкого, бронха, сердца или нажмите на подпись.";
+ lungs.forEach(l=>l.material.uniforms.b.value=l.userData.id==sel?.4:0);heartM.uniforms.b.value=sel=="heart"?.4:0;
+ bm.color.set(sel=="bronchi"?0xffffff:0x3ad8ff);tm.color.set(sel=="trachea"?0xffffff:0x9a86ff)}
+const rc=new T.Raycaster();
+function pickAt(e){const m=new T.Vector2(e.clientX/innerWidth*2-1,-e.clientY/innerHeight*2+1);rc.setFromCamera(m,cam);
+ const h=rc.intersectObjects(P.filter(o=>o.visible&&o.parent.visible),false);
+ const x=h.find(o=>o.object.userData.id!="left"&&o.object.userData.id!="right")||h[0];sel=x?x.object.userData.id:null;show()}
+show();
+
+/* Подписи */
+const lab=[["Трахея","trachea",V(0,1.9,.2)],["Бронхи","bronchi",V(.75,.7,.1)],["Правое лёгкое","right",V(-1.2,-.7,.3)],["Левое лёгкое","left",V(1.25,-.8,.3)],["Сердце","heart",V(.3,-.4,.5)]].map(([t,id,p])=>{
+ const d=document.createElement("div");d.className="lb";d.textContent=t;d.onclick=()=>{sel=id;show()};document.body.appendChild(d);return[d,p]});
+
+/* Кнопки */
+const tog=(id,fn)=>{const b=document.getElementById(id);b.onclick=()=>{b.classList.toggle("on");fn(b.classList.contains("on"))}};
+let breathing=true,bt=0;
+tog("bBr",v=>breathing=v);tog("bAu",v=>auto=v);
+tog("bSh",v=>lungs.forEach(l=>l.visible=v));tog("bBo",v=>{bron.visible=alvG.visible=flow.visible=v});tog("bHe",v=>heart.visible=v);
+
+function size(){ren.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();if(!size.done){rad=cam.aspect<.8?10.5:7.5;size.done=1}}
+addEventListener("resize",size);size();
+
+const clock=new T.Clock();
+(function loop(){requestAnimationFrame(loop);const dt=Math.min(clock.getDelta(),.05),t=clock.elapsedTime;
+ if(breathing)bt+=dt;const ph6=bt*Math.PI*2/6,b=(1-Math.cos(ph6))/2,inh=Math.sin(ph6)>0;
+ lungs.forEach(l=>{l.scale.set(1+.035*b,1+.06*b,1+.04*b)});
+ bm.opacity=.55+.35*b;
+ heart.scale.setScalar(1+.07*Math.pow(Math.max(0,Math.sin(t*7.5)),6));
+ flow.material.opacity=breathing?1:0;flow.material.transparent=true;
+ if(breathing){loop.f=(loop.f||0)+dt*(inh?.45:-.45);for(let i=0;i<N;i++){const u=(((i/N+loop.f)%1)+1)%1;fp.set([fj[i][0],2.3-1.3*u,fj[i][1]],i*3)}fg.attributes.position.needsUpdate=true}
+ if(!ptr.size){idle+=dt;if(Math.abs(vth)>1e-4){th+=vth;vth*=.94}if(auto&&idle>2.5)th+=dt*.25}
+ place();space.rotation.y+=dt*.004;dust.rotation.y+=dt*.02;dust.rotation.x+=dt*.01;rings[0].rotation.z+=dt*.15;rings[1].rotation.z-=dt*.1;
+ lab.forEach(([d,p])=>{const q=p.clone().project(cam),front=p.distanceTo(cam.position)<rad+.3;
+  d.style.transform=`translate(${(q.x*.5+.5)*innerWidth}px,${(-q.y*.5+.5)*innerHeight}px) translate(-50%,-50%)`;d.style.opacity=front?1:.3});
+ ren.render(scene,cam)})();
+</script></body></html>
