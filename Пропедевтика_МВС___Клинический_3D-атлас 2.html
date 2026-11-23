@@ -1,0 +1,1313 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Пропедевтика МВС — Клинический 3D-атлас</title>
+<style>
+  :root {
+    --bg: #f3eee4;
+    --ink: #1a1715;
+    --muted: #665e56;
+    --accent: #9b2226;
+    --accent-dim: rgba(155, 34, 38, 0.14);
+    --line: rgba(26, 23, 21, 0.15);
+    --paper: rgba(248, 244, 236, 0.92);
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Georgia", "Times New Roman", serif;
+    overflow: hidden;
+    height: 100dvh;
+    width: 100vw;
+    user-select: none;
+  }
+
+  /* Текстура пергаментной анатомической сетки и виньетка */
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image:
+      radial-gradient(circle at 50% 45%, transparent 25%, rgba(26, 23, 21, 0.07) 100%),
+      linear-gradient(var(--line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--line) 1px, transparent 1px);
+    background-size: 100% 100%, 40px 40px, 40px 40px;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    touch-action: none;
+    cursor: grab;
+    display: block;
+  }
+  canvas:active { cursor: grabbing; }
+
+  header {
+    position: fixed;
+    top: 16px;
+    left: 20px;
+    right: 20px;
+    z-index: 3;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    pointer-events: none;
+  }
+
+  .brand h1 {
+    font-size: clamp(17px, 2.6vw, 24px);
+    font-weight: normal;
+    letter-spacing: -0.02em;
+    line-height: 1.12;
+  }
+
+  .brand .meta {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .controls-top {
+    pointer-events: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+  }
+
+  .modes {
+    display: flex;
+    gap: 5px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .mode-btn, .toggle-btn {
+    background: var(--paper);
+    border: 1px solid var(--line);
+    color: var(--ink);
+    padding: 6px 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, transform 0.15s ease;
+  }
+
+  .mode-btn:hover, .toggle-btn:hover { border-color: var(--ink); }
+  .mode-btn:active, .toggle-btn:active { transform: scale(0.97); }
+  .mode-btn.active {
+    background: var(--ink);
+    color: var(--bg);
+    border-color: var(--ink);
+  }
+  .toggle-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  #pins-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .pin {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+  }
+
+  .pin.occluded {
+    opacity: 0.36;
+  }
+  .pin.occluded:hover, .pin.active {
+    opacity: 1 !important;
+  }
+
+  .pin-dot {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: var(--bg);
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 4px var(--accent-dim);
+    transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s ease;
+    flex-shrink: 0;
+  }
+
+  .pin:hover .pin-dot,
+  .pin.active .pin-dot {
+    transform: scale(1.38);
+    background: var(--accent);
+  }
+
+  .pin-label {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 3px 7px;
+    white-space: nowrap;
+    backdrop-filter: blur(5px);
+    transition: border-color 0.25s ease, color 0.25s ease;
+  }
+
+  .pin.active .pin-label {
+    border-color: var(--accent);
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .card {
+    position: fixed;
+    bottom: 16px;
+    left: 20px;
+    width: min(440px, calc(100vw - 40px));
+    background: var(--paper);
+    border: 1px solid var(--ink);
+    padding: 16px 18px;
+    z-index: 3;
+    backdrop-filter: blur(12px);
+    box-shadow: 5px 5px 0 rgba(26, 23, 21, 0.08);
+    transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .card.switching {
+    opacity: 0.45;
+    transform: translateY(4px);
+  }
+
+  .card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding-bottom: 5px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .card h2 {
+    font-size: 18px;
+    font-weight: normal;
+    margin-bottom: 7px;
+    line-height: 1.2;
+  }
+
+  .card p {
+    font-size: 13px;
+    line-height: 1.5;
+    color: #2b2622;
+    margin-bottom: 10px;
+  }
+
+  .technique {
+    background: rgba(26, 23, 21, 0.045);
+    border-left: 2px solid var(--accent);
+    padding: 8px 10px;
+    font-size: 12.3px;
+    line-height: 1.44;
+  }
+
+  .actions-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+
+  .action-btn {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 6px 11px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+
+  .action-btn:hover {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .legend-bar {
+    position: fixed;
+    bottom: 16px;
+    right: 20px;
+    z-index: 2;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 10px;
+    color: var(--muted);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: none;
+  }
+
+  .legend-items {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .swatch {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 4px;
+  }
+
+  .ripple {
+    position: fixed;
+    border: 1.5px solid var(--accent);
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 4;
+    animation: rippleWave 0.95s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  }
+
+  @keyframes rippleWave {
+    0% { width: 12px; height: 12px; opacity: 0.95; transform: translate(-50%, -50%) scale(1); }
+    100% { width: 170px; height: 170px; opacity: 0; transform: translate(-50%, -50%) scale(1.35); }
+  }
+
+  @media (max-width: 780px) {
+    header { flex-direction: column; gap: 8px; left: 12px; right: 12px; top: 12px; }
+    .controls-top { align-items: flex-start; }
+    .modes { justify-content: flex-start; }
+    .card { left: 12px; bottom: 12px; width: calc(100vw - 24px); padding: 12px 14px; }
+    .card p { font-size: 12.2px; margin-bottom: 8px; }
+    .technique { font-size: 11.6px; padding: 7px 9px; }
+    .legend-bar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>Пропедевтика мочевыделительной системы</h1>
+    <div class="meta">Топография • Пальпация • Перкуссия // Native WebGL</div>
+  </div>
+  <div class="controls-top">
+    <div class="modes">
+      <button class="mode-btn active" data-mode="normal">Норма</button>
+      <button class="mode-btn" data-mode="nephroptosis">Нефроптоз II ст.</button>
+      <button class="mode-btn" data-mode="colic">Почечная колика</button>
+      <button class="mode-btn" data-mode="retention">Острая задержка мочи</button>
+    </div>
+    <button class="toggle-btn active" id="toggle-xray">Рентген-контур тела: ВКЛ</button>
+  </div>
+</header>
+
+<canvas id="glcanvas"></canvas>
+<div id="pins-layer"></div>
+
+<section class="card" id="card">
+  <div class="card-head">
+    <span id="c-cat">Топографический ориентир</span>
+    <span id="c-view">Вентральная проекция</span>
+  </div>
+  <h2 id="c-title">Анатомо-физиологическая норма</h2>
+  <p id="c-desc">Почки расположены забрюшинно на уровне Th11–L3. Правая почка ниже левой на 1.5–2 см из-за прилегания печени. По мочеточникам проходит живая перистальтическая волна (5–6 сокращений в минуту).</p>
+  <div class="technique" id="c-tech">
+    <strong>Методика исследования:</strong> В норме почки у взрослого не пальпируются. Исключение — астеники, у которых на глубине вдоха удается пропальпировать нижний полюс правой почки.
+  </div>
+  <div class="actions-row" id="c-actions"></div>
+</section>
+
+<div class="legend-bar">
+  <div class="legend-items">
+    <span><i class="swatch" style="background:#a32626"></i>Почки / Аорта</span>
+    <span><i class="swatch" style="background:#28588a"></i>Нижняя полая вена</span>
+    <span><i class="swatch" style="background:#d9c8a9"></i>XII ребро / Таз</span>
+  </div>
+  <div>Вращение: 1 палец / ЛКМ • Масштаб: щипок / колесо</div>
+</div>
+
+<script>
+/**
+ * 1. КЛИНИЧЕСКАЯ БАЗА ЗНАНИЙ И ТОЧКИ ПРОЕКЦИИ
+ */
+const POINTS = [
+  {
+    id: 'pasternatsky',
+    label: 'Симптом Пастернацкого',
+    pos: [-0.72, 0.94, -0.58],
+    cam: { yaw: 2.86, pitch: 0.12, zoom: 4.1 },
+    cat: 'Перкуссия поясничной области',
+    view: 'Дорсальная проекция',
+    title: 'Костовертебральный угол (Симптом Пастернацкого)',
+    desc: 'Угол между XII ребром и наружным краем длиннейшей мышцы спины (m. erector spinae) — прямая проекция почечной лоханки сзади.',
+    tech: '<strong>Техника:</strong> Левая ладонь плотно прикладывается к пояснице, ребром правой кисти наносятся короткие несильные удары. Болезненность характерна для пиелонефрита, МКБ и паранефрита.',
+    sound: 'dull',
+    soundLabel: 'Выполнить поколачивание'
+  },
+  {
+    id: 'palpation_r',
+    label: 'Пальпация правой почки',
+    pos: [-0.72, 0.78, 0.36],
+    cam: { yaw: -0.38, pitch: 0.08, zoom: 3.9 },
+    cat: 'Глубокая бимануальная пальпация',
+    view: 'По Образцову–Стражеско',
+    title: 'Бимануальная пальпация почки',
+    desc: 'Проводится лежа на спине, на левом боку и вертикально (метод Боткина) для оценки формы, консистенции и дыхательной подвижности почки.',
+    tech: '<strong>Техника:</strong> Левая рука под поясницей ниже XII ребра, правая в подреберье кнаружи от прямой мышцы. На выдохе руки сближаются; на глубоком вдохе нижний полюс выскальзывает между пальцами.',
+    sound: null
+  },
+  {
+    id: 'ureter_upper',
+    label: 'Верхняя мочеточниковая т.',
+    pos: [-0.46, 0.22, 0.72],
+    cam: { yaw: -0.14, pitch: 0.04, zoom: 4.1 },
+    cat: 'Болевая точка передней стенки',
+    view: 'Уровень пупка',
+    title: 'Верхняя мочеточниковая точка (Бази)',
+    desc: 'Пересечение горизонтальной линии, проведенной через пупок, с наружным краем прямой мышцы живота (проекция лоханочно-мочеточникового сегмента).',
+    tech: '<strong>Клиническое значение:</strong> Резкая болезненность при глубоком надавливании указывает на обтурацию верхней трети мочеточника или пиелонефрит.',
+    sound: null
+  },
+  {
+    id: 'ureter_mid',
+    label: 'Средняя мочеточниковая т.',
+    pos: [-0.36, -0.46, 0.74],
+    cam: { yaw: -0.10, pitch: -0.08, zoom: 4.1 },
+    cat: 'Болевая точка • Дифдиагноз',
+    view: 'Linea bispinalis',
+    title: 'Средняя мочеточниковая точка (Турне)',
+    desc: 'Пересечение линии между передними верхними остями подвздошных костей (linea bispinalis) с наружным краем прямой мышцы живота.',
+    tech: '<strong>Дифдиагноз:</strong> Справа расположена в непосредственной близости от точки Мак-Бурнея — важно дифференцировать почечную колику с острым аппендицитом.',
+    sound: null
+  },
+  {
+    id: 'bladder',
+    label: 'Надлобковая область',
+    pos: [0.0, -1.32, 0.76],
+    cam: { yaw: 0.0, pitch: -0.22, zoom: 4.0 },
+    cat: 'Перкуссия и пальпация',
+    view: 'Regio pubica',
+    title: 'Перкуссия мочевого пузыря',
+    desc: 'Пустой мочевой пузырь скрыт за лобковым симфизом (над лобком определяется тимпанит кишечника). При объеме > 150–200 мл появляется притупление.',
+    tech: '<strong>Техника:</strong> Тихая перкуссия строго сверху вниз по срединной линии от пупка к лобку; палец-плессиметр располагается параллельно лонной дуге.',
+    sound: 'bladder',
+    soundLabel: 'Перкутировать над лобком'
+  }
+];
+
+const MODES = {
+  normal: {
+    cat: 'Топографический ориентир',
+    view: 'Вентральная проекция',
+    title: 'Анатомо-физиологическая норма',
+    desc: 'Почки расположены забрюшинно на уровне Th11–L3. Правая почка ниже левой на 1.5–2 см из-за прилегания печени. По мочеточникам проходит живая перистальтическая волна (5–6 сокращений в минуту).',
+    tech: '<strong>Методика исследования:</strong> В норме почки у взрослого не пальпируются. Исключение — астеники, у которых на глубине вдоха удается пропальпировать нижний полюс правой почки.',
+    cam: { yaw: -0.22, pitch: 0.06, zoom: 4.6 }
+  },
+  nephroptosis: {
+    cat: 'Патология фиксации',
+    view: 'Вертикальное положение',
+    title: 'Нефроптоз II степени справа',
+    desc: 'При переходе пациента в положение стоя правая почка смещается ниже подреберья более чем на 2 позвонка, полностью выходя из почечного ложа и ротируясь вокруг сосудистой ножки.',
+    tech: '<strong>Пальпация по Боткину:</strong> Врач сидит перед стоящим пациентом. Правая почка легко захватывается целиком — гладкая, безболезненная, свободно вправляется в подреберье.',
+    cam: { yaw: -0.32, pitch: 0.04, zoom: 4.3 }
+  },
+  colic: {
+    cat: 'Ургентное состояние',
+    view: 'Обтурация мочеточника',
+    title: 'Правосторонняя почечная колика',
+    desc: 'Конкремент перекрыл просвет правого мочеточника. Выше места блока развивается расширение лоханки и верхней трети мочеточника (острый гидронефроз) и гиперперистальтика.',
+    tech: '<strong>Клиника:</strong> Приступообразная нестерпимая боль в пояснице с иррадиацией по ходу мочеточника в пах и бедро. Резко положительный симптом Пастернацкого справа.',
+    cam: { yaw: -0.20, pitch: 0.02, zoom: 4.3 }
+  },
+  retention: {
+    cat: 'Нарушение уродинамики',
+    view: 'Ишурия • Шаровидный пузырь',
+    title: 'Острая задержка мочи (Ischuria acuta)',
+    desc: 'Мочевой пузырь перерастянут (> 600–800 мл), его дно поднимается почти до уровня пупка, оттесняя петли кишечника вверх.',
+    tech: '<strong>Физикально:</strong> Над лобком контурируется плотное эластическое выбухание. Перкуторно — тупой звук с верхней границей, обращенной выпуклостью вверх.',
+    cam: { yaw: 0.0, pitch: -0.18, zoom: 4.2 }
+  }
+};
+
+/**
+ * 2. СИНТЕЗАТОР ПЕРКУССИИ НА WEB AUDIO API
+ */
+let audioCtx = null;
+function playPercussion(kind) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+
+    const now = audioCtx.currentTime;
+    const osc = audioCtx.createOscillator();
+    const subOsc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    const isDull = kind === 'dull' || (kind === 'bladder' && currentMode === 'retention');
+
+    // Тимпанит (пустой пузырь/кишечник) — более высокий и резонирующий; тупой звук — короткий и низкий
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(isDull ? 94 : 196, now);
+    osc.frequency.exponentialRampToValueAtTime(isDull ? 36 : 68, now + (isDull ? 0.09 : 0.24));
+
+    subOsc.type = 'sine';
+    subOsc.frequency.setValueAtTime(isDull ? 65 : 110, now);
+    subOsc.frequency.exponentialRampToValueAtTime(28, now + 0.12);
+
+    gain.gain.setValueAtTime(0.65, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + (isDull ? 0.11 : 0.26));
+
+    osc.connect(gain);
+    subOsc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start(now);
+    subOsc.start(now);
+    osc.stop(now + 0.28);
+    subOsc.stop(now + 0.28);
+  } catch (e) {}
+}
+
+/**
+ * 3. НАТИВНЫЙ WEBGL И КАСТОМНЫЕ GLSL ШЕЙДЕРЫ
+ */
+const canvas = document.getElementById('glcanvas');
+const gl = canvas.getContext('webgl', { antialias: true, alpha: true });
+
+const VS = `
+  attribute vec3 aPos;
+  attribute vec3 aNorm;
+  uniform mat4 uProj;
+  uniform mat4 uView;
+  uniform mat4 uModel;
+  uniform float uTime;
+  uniform float uPulseType; // 0: статика, 1: перистальтика, 2: пульсация камня, 3: гидронефроз
+
+  varying vec3 vNorm;
+  varying vec3 vWorldPos;
+  varying vec3 vLocalPos;
+
+  void main() {
+    vec3 pos = aPos;
+    vLocalPos = aPos;
+
+    // Живая перистальтическая волна вдоль мочеточника (сверху вниз)
+    if (uPulseType > 0.5 && uPulseType < 1.5) {
+      float wave = sin(pos.y * 6.0 + uTime * 4.6);
+      float bulge = smoothstep(0.3, 1.0, wave) * 0.028;
+      pos += aNorm * bulge;
+    }
+
+    // Гидронефротическое расширение лоханки и верхней трети правого мочеточника (выше y = -0.22)
+    if (uPulseType > 2.5) {
+      float aboveStone = smoothstep(-0.24, 0.25, pos.y);
+      float wave = sin(pos.y * 7.5 + uTime * 6.2);
+      float hyperBulge = smoothstep(0.2, 1.0, wave) * 0.036 * aboveStone;
+      pos += aNorm * (0.045 * aboveStone + hyperBulge);
+    }
+
+    vec4 worldPos = uModel * vec4(pos, 1.0);
+    vWorldPos = worldPos.xyz;
+    vNorm = mat3(uModel) * aNorm;
+    gl_Position = uProj * uView * worldPos;
+  }
+`;
+
+const FS = `
+  precision mediump float;
+  varying vec3 vNorm;
+  varying vec3 vWorldPos;
+  varying vec3 vLocalPos;
+
+  uniform vec3 uCamPos;
+  uniform vec3 uColor;
+  uniform float uAlpha;
+  uniform float uFresnel;
+  uniform float uTime;
+  uniform float uPulseType;
+  uniform float uOrganTex; // 1.0 для паренхимы почек/пузыря, 0.0 для прочего
+
+  // Процедурный 3D-шум для органической фактуры ткани
+  float hash(vec3 p) {
+    p = fract(p * 0.3183099 + 0.1);
+    p *= 17.0;
+    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
+  }
+
+  float noise(vec3 x) {
+    vec3 i = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+    return mix(
+      mix(mix(hash(i + vec3(0,0,0)), hash(i + vec3(1,0,0)), f.x),
+          mix(hash(i + vec3(0,1,0)), hash(i + vec3(1,1,0)), f.x), f.y),
+      mix(mix(hash(i + vec3(0,0,1)), hash(i + vec3(1,0,1)), f.x),
+          mix(hash(i + vec3(0,1,1)), hash(i + vec3(1,1,1)), f.x), f.y),
+      f.z
+    );
+  }
+
+  void main() {
+    vec3 N = normalize(vNorm);
+    vec3 V = normalize(uCamPos - vWorldPos);
+    vec3 L1 = normalize(vec3(2.2, 4.5, 3.8));
+    vec3 L2 = normalize(vec3(-2.5, -1.5, -2.5));
+
+    // Освещение по Фонгу + контровой свет + блик влажной капсулы
+    float diff1 = max(dot(N, L1), 0.0);
+    float diff2 = max(dot(N, L2), 0.0) * 0.28;
+    vec3 H = normalize(L1 + V);
+    float spec = pow(max(dot(N, H), 0.0), 36.0) * 0.32;
+
+    vec3 baseCol = uColor;
+
+    // Органическая фактура поверхности и градиент к воротам почки
+    if (uOrganTex > 0.5) {
+      float n = noise(vLocalPos * 11.0) * 0.14 - 0.07;
+      float vascular = smoothstep(0.55, 0.72, noise(vLocalPos * 22.0)) * 0.06;
+      baseCol += vec3(n - vascular, n * 0.5 - vascular, n * 0.4);
+    }
+
+    vec3 col = baseCol * (0.36 + diff1 * 0.64 + diff2) + vec3(1.0, 0.96, 0.92) * spec * uOrganTex;
+
+    // Подсветка перистальтики / гидронефроза / конкремента
+    if (uPulseType > 0.5 && uPulseType < 1.5) {
+      float wave = smoothstep(0.4, 1.0, sin(vLocalPos.y * 6.0 + uTime * 4.6));
+      col += vec3(0.42, 0.12, 0.08) * wave;
+    } else if (uPulseType > 1.5 && uPulseType < 2.5) {
+      float glow = 0.5 + 0.5 * sin(uTime * 6.5);
+      col += vec3(0.75, 0.25, 0.02) * glow;
+    } else if (uPulseType > 2.5) {
+      float aboveStone = smoothstep(-0.24, 0.25, vLocalPos.y);
+      float wave = smoothstep(0.3, 1.0, sin(vLocalPos.y * 7.5 + uTime * 6.2));
+      col += vec3(0.52, 0.14, 0.06) * (aboveStone * 0.55 + wave * aboveStone * 0.45);
+    }
+
+    // Френель-контур в стиле анатомической гравюры
+    float rim = pow(1.0 - max(dot(N, V), 0.0), uFresnel);
+    col = mix(col, vec3(0.10, 0.09, 0.08), rim * 0.56);
+
+    float alpha = clamp(uAlpha + rim * (1.0 - uAlpha) * 0.85, 0.0, 1.0);
+    gl_FragColor = vec4(col, alpha);
+  }
+`;
+
+function createShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  return s;
+}
+
+const program = gl.createProgram();
+gl.attachShader(program, createShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(program, createShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(program);
+gl.useProgram(program);
+
+const loc = {
+  aPos: gl.getAttribLocation(program, 'aPos'),
+  aNorm: gl.getAttribLocation(program, 'aNorm'),
+  uProj: gl.getUniformLocation(program, 'uProj'),
+  uView: gl.getUniformLocation(program, 'uView'),
+  uModel: gl.getUniformLocation(program, 'uModel'),
+  uCamPos: gl.getUniformLocation(program, 'uCamPos'),
+  uColor: gl.getUniformLocation(program, 'uColor'),
+  uAlpha: gl.getUniformLocation(program, 'uAlpha'),
+  uFresnel: gl.getUniformLocation(program, 'uFresnel'),
+  uTime: gl.getUniformLocation(program, 'uTime'),
+  uPulseType: gl.getUniformLocation(program, 'uPulseType'),
+  uOrganTex: gl.getUniformLocation(program, 'uOrganTex')
+};
+
+/**
+ * 4. ПРОЦЕДУРНАЯ 3D-АНАТОМИЯ (CCW ОБХОД ТРЕУГОЛЬНИКОВ И ПРАВИЛЬНЫЕ НОРМАЛИ)
+ */
+function makeBuffers(pos, norm, idx) {
+  const posBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, posBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+
+  const normBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, normBuf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(norm), gl.STATIC_DRAW);
+
+  const idxBuf = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, idxBuf);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+
+  return { posBuf, normBuf, idxBuf, count: idx.length };
+}
+
+// Бобовидная почка с выраженными воротами (hilum)
+function buildKidney(isLeft) {
+  const stacks = 36, slices = 36;
+  const pos = [], norm = [], idx = [];
+  const sign = isLeft ? -1 : 1;
+
+  for (let i = 0; i <= stacks; i++) {
+    const v = i / stacks;
+    const phi = v * Math.PI;
+    for (let j = 0; j <= slices; j++) {
+      const theta = (j / slices) * Math.PI * 2;
+      const x = Math.sin(phi) * Math.cos(theta);
+      const y = Math.cos(phi);
+      const z = Math.sin(phi) * Math.sin(theta);
+
+      // Медиальное вдавление почечных ворот
+      const medial = Math.max(0, sign * Math.cos(theta));
+      const hilum = Math.exp(-Math.pow((v - 0.5) * 4.0, 2)) * medial * 0.46;
+      const curve = Math.sin(phi) * 0.18 * sign;
+
+      pos.push(x * 0.38 - sign * hilum + curve, y * 0.64, z * 0.27);
+      const nx = x - sign * hilum * 1.6;
+      const ny = y * 0.70;
+      const nz = z * 1.35;
+      const len = Math.hypot(nx, ny, nz) || 1;
+      norm.push(nx / len, ny / len, nz / len);
+    }
+  }
+
+  for (let i = 0; i < stacks; i++) {
+    for (let j = 0; j < slices; j++) {
+      const a = i * (slices + 1) + j;
+      const b = a + slices + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  return makeBuffers(pos, norm, idx);
+}
+
+// Универсальная криволинейная трубка по сплайну Безье с переменной толщиной
+function buildTube(pts, rStart, rEnd, funnelTop = false, segs = 40, radSegs = 14) {
+  const bezier = t => {
+    const k = 1 - t;
+    return [0, 1, 2].map(i =>
+      k*k*k*pts[0][i] + 3*k*k*t*pts[1][i] + 3*k*t*t*pts[2][i] + t*t*t*pts[3][i]
+    );
+  };
+
+  const pos = [], norm = [], idx = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const p = bezier(t);
+    const p2 = bezier(Math.min(1, t + 0.01));
+    const tang = [p2[0] - p[0], p2[1] - p[1], p2[2] - p[2]];
+    const tl = Math.hypot(...tang) || 1;
+    tang[0] /= tl; tang[1] /= tl; tang[2] /= tl;
+
+    const up = Math.abs(tang[2]) > 0.9 ? [0, 1, 0] : [0, 0, 1];
+    const binorm = [
+      tang[1]*up[2] - tang[2]*up[1],
+      tang[2]*up[0] - tang[0]*up[2],
+      tang[0]*up[1] - tang[1]*up[0]
+    ];
+    const bl = Math.hypot(...binorm) || 1;
+    binorm[0] /= bl; binorm[1] /= bl; binorm[2] /= bl;
+
+    const normal = [
+      binorm[1]*tang[2] - binorm[2]*tang[1],
+      binorm[2]*tang[0] - binorm[0]*tang[2],
+      binorm[0]*tang[1] - binorm[1]*tang[0]
+    ];
+
+    let r = rStart + (rEnd - rStart) * t;
+    if (funnelTop) {
+      // Расширение почечной лоханки у ворот почки
+      r += rStart * Math.pow(1.0 - t, 5) * 2.3;
+    }
+
+    for (let j = 0; j <= radSegs; j++) {
+      const a = (j / radSegs) * Math.PI * 2;
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const nx = normal[0]*ca + binorm[0]*sa;
+      const ny = normal[1]*ca + binorm[1]*sa;
+      const nz = normal[2]*ca + binorm[2]*sa;
+      pos.push(p[0] + nx*r, p[1] + ny*r, p[2] + nz*r);
+      norm.push(nx, ny, nz);
+    }
+  }
+
+  for (let i = 0; i < segs; i++) {
+    for (let j = 0; j < radSegs; j++) {
+      const a = i * (radSegs + 1) + j;
+      const b = a + radSegs + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  return makeBuffers(pos, norm, idx);
+}
+
+// Изогнутая дуга XII ребра
+function buildRibPair() {
+  const ptsR = [
+    [-0.08, 1.24, -0.58],
+    [-0.55, 1.16, -0.56],
+    [-0.95, 1.02, -0.25],
+    [-1.02, 0.90, 0.16]
+  ];
+  const ptsL = [
+    [0.08, 1.24, -0.58],
+    [0.55, 1.16, -0.56],
+    [0.95, 1.02, -0.25],
+    [1.02, 0.90, 0.16]
+  ];
+  return {
+    r: buildTube(ptsR, 0.036, 0.022, false, 24, 10),
+    l: buildTube(ptsL, 0.036, 0.022, false, 24, 10)
+  };
+}
+
+// Эллипсоид / анатомический силуэт торса
+function buildEllipsoid(rx, ry, rz, stacks = 30, slices = 30, waist = 0) {
+  const pos = [], norm = [], idx = [];
+  for (let i = 0; i <= stacks; i++) {
+    const phi = (i / stacks) * Math.PI;
+    const yn = Math.cos(phi);
+    const pinch = 1.0 - waist * Math.exp(-Math.pow(yn * 2.1, 2));
+    for (let j = 0; j <= slices; j++) {
+      const theta = (j / slices) * Math.PI * 2;
+      const x = Math.sin(phi) * Math.cos(theta) * pinch;
+      const y = yn;
+      const z = Math.sin(phi) * Math.sin(theta) * pinch;
+      pos.push(x * rx, y * ry, z * rz);
+      const len = Math.hypot(x / rx, y / ry, z / rz) || 1;
+      norm.push((x / rx) / len, (y / ry) / len, (z / rz) / len);
+    }
+  }
+  for (let i = 0; i < stacks; i++) {
+    for (let j = 0; j < slices; j++) {
+      const a = i * (slices + 1) + j;
+      const b = a + slices + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  return makeBuffers(pos, norm, idx);
+}
+
+// Ограненный конкремент (камень)
+function buildStone() {
+  const pos = [], norm = [], idx = [];
+  const stacks = 8, slices = 10;
+  for (let i = 0; i <= stacks; i++) {
+    const phi = (i / stacks) * Math.PI;
+    for (let j = 0; j <= slices; j++) {
+      const theta = (j / slices) * Math.PI * 2;
+      const spike = 1.0 + 0.28 * Math.sin(i * 3.1) * Math.cos(j * 4.3);
+      const x = Math.sin(phi) * Math.cos(theta) * 0.072 * spike;
+      const y = Math.cos(phi) * 0.095 * spike;
+      const z = Math.sin(phi) * Math.sin(theta) * 0.072 * spike;
+      pos.push(x, y, z);
+      const l = Math.hypot(x, y, z) || 1;
+      norm.push(x / l, y / l, z / l);
+    }
+  }
+  for (let i = 0; i < stacks; i++) {
+    for (let j = 0; j < slices; j++) {
+      const a = i * (slices + 1) + j;
+      const b = a + slices + 1;
+      idx.push(a, a + 1, b, b, a + 1, b + 1);
+    }
+  }
+  return makeBuffers(pos, norm, idx);
+}
+
+const ribs = buildRibPair();
+const meshes = {
+  kidneyR: buildKidney(false),
+  kidneyL: buildKidney(true),
+  // S-образные мочеточники с лоханкой
+  ureterR: buildTube([
+    [-0.46, 0.80, -0.26],
+    [-0.48, 0.22, -0.10],
+    [-0.36, -0.46, 0.12],
+    [-0.16, -1.24, 0.32]
+  ], 0.034, 0.028, true, 48, 14),
+  ureterL: buildTube([
+    [0.46, 0.96, -0.26],
+    [0.48, 0.30, -0.10],
+    [0.36, -0.44, 0.12],
+    [0.16, -1.24, 0.32]
+  ], 0.034, 0.028, true, 48, 14),
+  // Брюшная аорта и почечные артерии
+  aorta: buildTube([
+    [0.07, 1.55, -0.24],
+    [0.07, 0.70, -0.22],
+    [0.06, -0.10, -0.18],
+    [0.05, -0.78, -0.12]
+  ], 0.072, 0.064, false, 24, 14),
+  renalArtR: buildTube([
+    [0.07, 0.84, -0.22],
+    [-0.14, 0.82, -0.24],
+    [-0.32, 0.80, -0.26],
+    [-0.48, 0.79, -0.27]
+  ], 0.032, 0.026, false, 16, 10),
+  renalArtL: buildTube([
+    [0.07, 0.96, -0.22],
+    [0.22, 0.96, -0.24],
+    [0.36, 0.96, -0.26],
+    [0.48, 0.96, -0.27]
+  ], 0.032, 0.026, false, 16, 10),
+  // Нижняя полая вена и почечные вены
+  venaCava: buildTube([
+    [-0.10, 1.55, -0.18],
+    [-0.10, 0.70, -0.16],
+    [-0.09, -0.10, -0.13],
+    [-0.08, -0.78, -0.08]
+  ], 0.082, 0.074, false, 24, 14),
+  renalVeinR: buildTube([
+    [-0.10, 0.77, -0.16],
+    [-0.24, 0.77, -0.20],
+    [-0.38, 0.77, -0.23],
+    [-0.49, 0.77, -0.25]
+  ], 0.036, 0.030, false, 16, 10),
+  renalVeinL: buildTube([
+    [-0.10, 0.90, -0.16],
+    [0.12, 0.91, -0.18],
+    [0.32, 0.92, -0.21],
+    [0.49, 0.93, -0.24]
+  ], 0.038, 0.030, false, 16, 10),
+  // Мочевой пузырь, уретра, камень, ориентиры
+  bladder: buildEllipsoid(0.38, 0.32, 0.32, 28, 28),
+  urethra: buildTube([
+    [0.0, -1.48, 0.38],
+    [0.0, -1.62, 0.39],
+    [0.0, -1.75, 0.40],
+    [0.0, -1.88, 0.41]
+  ], 0.034, 0.026, false, 12, 10),
+  stone: buildStone(),
+  ribR: ribs.r,
+  ribL: ribs.l,
+  navel: buildEllipsoid(0.035, 0.035, 0.02, 10, 10),
+  spinaR: buildEllipsoid(0.04, 0.04, 0.03, 10, 10),
+  spinaL: buildEllipsoid(0.04, 0.04, 0.03, 10, 10),
+  torso: buildEllipsoid(1.30, 2.38, 0.80, 36, 40, 0.15)
+};
+
+/**
+ * 5. МАТРИЧНАЯ 3D-МАТЕМАТИКА И АДАПТИВНЫЙ FOV
+ */
+function matPerspective(fov, aspect, near, far) {
+  const f = 1.0 / Math.tan(fov / 2);
+  const nf = 1 / (near - far);
+  return new Float32Array([
+    f / aspect, 0, 0, 0,
+    0, f, 0, 0,
+    0, 0, (far + near) * nf, -1,
+    0, 0, 2 * far * near * nf, 0
+  ]);
+}
+
+function matLookAt(eye, target, up) {
+  let zx = eye[0] - target[0], zy = eye[1] - target[1], zz = eye[2] - target[2];
+  let len = Math.hypot(zx, zy, zz);
+  zx /= len; zy /= len; zz /= len;
+
+  let xx = up[1]*zz - up[2]*zy;
+  let xy = up[2]*zx - up[0]*zz;
+  let xz = up[0]*zy - up[1]*zx;
+  len = Math.hypot(xx, xy, xz);
+  xx /= len; xy /= len; xz /= len;
+
+  const yx = zy*xz - zz*xy;
+  const yy = zz*xx - zx*xz;
+  const yz = zx*xy - zy*xx;
+
+  return new Float32Array([
+    xx, yx, zx, 0,
+    xy, yy, zy, 0,
+    xz, yz, zz, 0,
+    -(xx*eye[0] + xy*eye[1] + xz*eye[2]),
+    -(yx*eye[0] + yy*eye[1] + yz*eye[2]),
+    -(zx*eye[0] + zy*eye[1] + zz*eye[2]),
+    1
+  ]);
+}
+
+function matTransform(tx, ty, tz, rx, ry, rz, sx, sy, sz) {
+  const cx = Math.cos(rx), sx_ = Math.sin(rx);
+  const cy = Math.cos(ry), sy_ = Math.sin(ry);
+  const cz = Math.cos(rz), sz_ = Math.sin(rz);
+  return new Float32Array([
+    (cy * cz) * sx, (cy * sz_) * sx, (-sy_) * sx, 0,
+    (sx_ * sy_ * cz - cx * sz_) * sy, (sx_ * sy_ * sz_ + cx * cz) * sy, (sx_ * cy) * sy, 0,
+    (cx * sy_ * cz + sx_ * sz_) * sz, (cx * sy_ * sz_ - sx_ * cz) * sz, (cx * cy) * sz, 0,
+    tx, ty, tz, 1
+  ]);
+}
+
+function toScreen(p3, proj, view, w, h) {
+  const x = p3[0], y = p3[1], z = p3[2];
+  const vx = view[0]*x + view[4]*y + view[8]*z + view[12];
+  const vy = view[1]*x + view[5]*y + view[9]*z + view[13];
+  const vz = view[2]*x + view[6]*y + view[10]*z + view[14];
+  const vw = view[3]*x + view[7]*y + view[11]*z + view[15];
+
+  const px = proj[0]*vx + proj[4]*vy + proj[8]*vz + proj[12]*vw;
+  const py = proj[1]*vx + proj[5]*vy + proj[9]*vz + proj[13]*vw;
+  const pw = proj[3]*vx + proj[7]*vy + proj[11]*vz + proj[15]*vw;
+
+  return {
+    x: (px / pw * 0.5 + 0.5) * w,
+    y: (-py / pw * 0.5 + 0.5) * h,
+    depth: vz,
+    visible: pw > 0
+  };
+}
+
+/**
+ * 6. ФИЗИКА КАМЕРЫ (SPRING PHYSICS), УПРАВЛЕНИЕ И МОРФИНГ
+ */
+let currentMode = 'normal';
+let showTorso = true;
+
+const cam = {
+  yaw: -0.22, tYaw: -0.22, vYaw: 0,
+  pitch: 0.06, tPitch: 0.06, vPitch: 0,
+  zoom: 4.6, tZoom: 4.6, vZoom: 0,
+  drag: false, lx: 0, ly: 0,
+  pinchDist: 0
+};
+
+const organs = {
+  rkY: 0.78, tRkY: 0.78,
+  rkRot: -0.14, tRkRot: -0.14,
+  blScale: 1.0, tBlScale: 1.0,
+  stoneA: 0.0, tStoneA: 0.0
+};
+
+const cardEl = document.getElementById('card');
+function updateCard({ cat, view, title, desc, tech, sound, soundLabel, pinId }) {
+  cardEl.classList.add('switching');
+  setTimeout(() => {
+    document.getElementById('c-cat').textContent = cat;
+    document.getElementById('c-view').textContent = view;
+    document.getElementById('c-title').textContent = title;
+    document.getElementById('c-desc').textContent = desc;
+    document.getElementById('c-tech').innerHTML = tech;
+
+    const actions = document.getElementById('c-actions');
+    actions.innerHTML = '';
+    if (sound) {
+      const btn = document.createElement('button');
+      btn.className = 'action-btn';
+      btn.innerHTML = `<span>◎</span> ${soundLabel}`;
+      btn.onclick = () => {
+        playPercussion(sound);
+        const rect = pinEls[pinId].getBoundingClientRect();
+        const r = document.createElement('div');
+        r.className = 'ripple';
+        r.style.left = (rect.left + 6.5) + 'px';
+        r.style.top = (rect.top + 6.5) + 'px';
+        document.body.appendChild(r);
+        setTimeout(() => r.remove(), 960);
+      };
+      actions.appendChild(btn);
+    }
+    cardEl.classList.remove('switching');
+  }, 130);
+}
+
+const pinsLayer = document.getElementById('pins-layer');
+const pinEls = {};
+
+POINTS.forEach(pt => {
+  const el = document.createElement('div');
+  el.className = 'pin';
+  el.innerHTML = `<div class="pin-dot"></div><div class="pin-label">${pt.label}</div>`;
+  el.addEventListener('click', e => {
+    e.stopPropagation();
+    Object.values(pinEls).forEach(p => p.classList.remove('active'));
+    el.classList.add('active');
+    cam.tYaw = pt.cam.yaw;
+    cam.tPitch = pt.cam.pitch;
+    cam.tZoom = pt.cam.zoom;
+    updateCard({ ...pt, pinId: pt.id });
+  });
+  pinsLayer.appendChild(el);
+  pinEls[pt.id] = el;
+});
+
+document.querySelectorAll('.mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    Object.values(pinEls).forEach(p => p.classList.remove('active'));
+
+    currentMode = btn.dataset.mode;
+    const m = MODES[currentMode];
+    cam.tYaw = m.cam.yaw;
+    cam.tPitch = m.cam.pitch;
+    cam.tZoom = m.cam.zoom;
+
+    organs.tRkY = currentMode === 'nephroptosis' ? 0.04 : 0.78;
+    organs.tRkRot = currentMode === 'nephroptosis' ? -0.46 : -0.14;
+    organs.tBlScale = currentMode === 'retention' ? 1.82 : 1.0;
+    organs.tStoneA = currentMode === 'colic' ? 1.0 : 0.0;
+
+    updateCard(m);
+  });
+});
+
+const toggleXrayBtn = document.getElementById('toggle-xray');
+toggleXrayBtn.addEventListener('click', () => {
+  showTorso = !showTorso;
+  toggleXrayBtn.classList.toggle('active', showTorso);
+  toggleXrayBtn.textContent = `Рентген-контур тела: ${showTorso ? 'ВКЛ' : 'ВЫКЛ'}`;
+});
+
+// Поддержка мыши и мультитач-зума
+const activePointers = new Map();
+canvas.addEventListener('pointerdown', e => {
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (activePointers.size === 1) {
+    cam.drag = true;
+    cam.lx = e.clientX;
+    cam.ly = e.clientY;
+  } else if (activePointers.size === 2) {
+    cam.drag = false;
+    const pts = Array.from(activePointers.values());
+    cam.pinchDist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+});
+
+window.addEventListener('pointermove', e => {
+  if (!activePointers.has(e.pointerId)) return;
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+  if (activePointers.size === 2) {
+    const pts = Array.from(activePointers.values());
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (cam.pinchDist > 0) {
+      const delta = (cam.pinchDist - dist) * 0.015;
+      cam.tZoom = Math.max(2.9, Math.min(7.8, cam.tZoom + delta));
+    }
+    cam.pinchDist = dist;
+  } else if (cam.drag && activePointers.size === 1) {
+    cam.tYaw -= (e.clientX - cam.lx) * 0.0075;
+    cam.tPitch = Math.max(-1.1, Math.min(1.1, cam.tPitch + (e.clientY - cam.ly) * 0.0075));
+    cam.lx = e.clientX;
+    cam.ly = e.clientY;
+  }
+});
+
+function releasePointer(e) {
+  activePointers.delete(e.pointerId);
+  if (activePointers.size < 2) cam.pinchDist = 0;
+  if (activePointers.size === 0) cam.drag = false;
+}
+window.addEventListener('pointerup', releasePointer);
+window.addEventListener('pointercancel', releasePointer);
+
+canvas.addEventListener('wheel', e => {
+  e.preventDefault();
+  cam.tZoom = Math.max(2.9, Math.min(7.8, cam.tZoom + e.deltaY * 0.003));
+}, { passive: false });
+
+/**
+ * 7. РЕНДЕРИНГ СЦЕНЫ
+ */
+function draw(mesh, model, color, alpha, fresnel, pulse = 0, organTex = 0) {
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.posBuf);
+  gl.vertexAttribPointer(loc.aPos, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(loc.aPos);
+
+  gl.bindBuffer(gl.ARRAY_BUFFER, mesh.normBuf);
+  gl.vertexAttribPointer(loc.aNorm, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(loc.aNorm);
+
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, mesh.idxBuf);
+  gl.uniformMatrix4fv(loc.uModel, false, model);
+  gl.uniform3fv(loc.uColor, color);
+  gl.uniform1f(loc.uAlpha, alpha);
+  gl.uniform1f(loc.uFresnel, fresnel);
+  gl.uniform1f(loc.uPulseType, pulse);
+  gl.uniform1f(loc.uOrganTex, organTex);
+  gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+}
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  gl.viewport(0, 0, canvas.width, canvas.height);
+}
+window.addEventListener('resize', resize);
+resize();
+
+gl.enable(gl.DEPTH_TEST);
+gl.enable(gl.BLEND);
+gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+const t0 = performance.now();
+function loop(now) {
+  const t = (now - t0) * 0.001;
+
+  // Пружинная физика камеры (spring physics)
+  const stiffness = 0.09;
+  const damping = 0.72;
+
+  cam.vYaw = (cam.vYaw + (cam.tYaw - cam.yaw) * stiffness) * damping;
+  cam.vPitch = (cam.vPitch + (cam.tPitch - cam.pitch) * stiffness) * damping;
+  cam.vZoom = (cam.vZoom + (cam.tZoom - cam.zoom) * stiffness) * damping;
+
+  cam.yaw += cam.vYaw;
+  cam.pitch += cam.vPitch;
+  cam.zoom += cam.vZoom;
+
+  const k = 0.085;
+  organs.rkY += (organs.tRkY - organs.rkY) * k;
+  organs.rkRot += (organs.tRkRot - organs.rkRot) * k;
+  organs.blScale += (organs.tBlScale - organs.blScale) * k;
+  organs.stoneA += (organs.tStoneA - organs.stoneA) * k;
+
+  // Дыхательная экскурсия почек
+  const breath = Math.sin(t * 1.45) * 0.032;
+
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  // Адаптивный FOV для портретной ориентации (чтобы 3D-модель всегда оставалась крупной и не обрезалась)
+  const aspect = canvas.width / canvas.height;
+  const baseFov = aspect < 1.0 ? 54 : 42;
+  const portraitDistanceBoost = aspect < 1.0 ? 1.18 : 1.0;
+  const effectiveZoom = cam.zoom * portraitDistanceBoost;
+
+  const eye = [
+    Math.sin(cam.yaw) * Math.cos(cam.pitch) * effectiveZoom,
+    Math.sin(cam.pitch) * effectiveZoom,
+    Math.cos(cam.yaw) * Math.cos(cam.pitch) * effectiveZoom
+  ];
+
+  const proj = matPerspective(baseFov * Math.PI / 180, aspect, 0.1, 50);
+  const view = matLookAt(eye, [0, -0.12, 0], [0, 1, 0]);
+
+  gl.uniformMatrix4fv(loc.uProj, false, proj);
+  gl.uniformMatrix4fv(loc.uView, false, view);
+  gl.uniform3fv(loc.uCamPos, eye);
+  gl.uniform1f(loc.uTime, t);
+
+  gl.depthMask(true);
+
+  // 1. Почки (с процедурной органической фактурой uOrganTex = 1.0)
+  draw(meshes.kidneyR, matTransform(-0.68, organs.rkY + breath, -0.28, 0.08, 0.2, organs.rkRot, 1, 1, 1), [0.64, 0.16, 0.16], 1.0, 2.8, 0, 1.0);
+  draw(meshes.kidneyL, matTransform(0.68, 0.96 + breath, -0.28, 0.08, -0.2, 0.14, 1, 1, 1), [0.64, 0.16, 0.16], 1.0, 2.8, 0, 1.0);
+
+  // 2. Почечные сосуды: Аорта и почечные артерии (алые), Нижняя полая вена и почечные вены (синие)
+  const artCol = [0.78, 0.14, 0.14];
+  const veinCol = [0.16, 0.35, 0.56];
+  draw(meshes.aorta, matTransform(0, 0, 0, 0, 0, 0, 1, 1, 1), artCol, 1.0, 2.4);
+  draw(meshes.renalArtR, matTransform(0, (organs.rkY - 0.78) * 0.65 + breath * 0.6, 0, 0, 0, 0, 1, 1, 1), artCol, 1.0, 2.4);
+  draw(meshes.renalArtL, matTransform(0, breath * 0.6, 0, 0, 0, 0, 1, 1, 1), artCol, 1.0, 2.4);
+
+  draw(meshes.venaCava, matTransform(0, 0, 0, 0, 0, 0, 1, 1, 1), veinCol, 1.0, 2.4);
+  draw(meshes.renalVeinR, matTransform(0, (organs.rkY - 0.78) * 0.65 + breath * 0.6, 0, 0, 0, 0, 1, 1, 1), veinCol, 1.0, 2.4);
+  draw(meshes.renalVeinL, matTransform(0, breath * 0.6, 0, 0, 0, 0, 1, 1, 1), veinCol, 1.0, 2.4);
+
+  // 3. Мочеточники (правый в режиме колики переходит в гидронефроз uPulseType = 3.0)
+  const rightUreterPulse = currentMode === 'colic' ? 3.0 : 1.0;
+  draw(meshes.ureterR, matTransform(0, breath * 0.5, 0, 0, 0, 0, 1, 1, 1), [0.84, 0.46, 0.38], 1.0, 2.2, rightUreterPulse);
+  draw(meshes.ureterL, matTransform(0, breath * 0.5, 0, 0, 0, 0, 1, 1, 1), [0.84, 0.46, 0.38], 1.0, 2.2, 1.0);
+
+  // 4. Мочевой пузырь и уретра
+  const bs = organs.blScale;
+  const blY = -1.32 + (bs - 1.0) * 0.34;
+  draw(meshes.bladder, matTransform(0, blY, 0.34, 0.15, 0, 0, bs, bs * 1.15, bs), [0.76, 0.24, 0.22], 1.0, 2.5, 0, 1.0);
+  draw(meshes.urethra, matTransform(0, 0, 0, 0, 0, 0, 1, 1, 1), [0.80, 0.42, 0.36], 1.0, 2.2);
+
+  // 5. Конкремент (камень в правом мочеточнике при почечной колике)
+  if (organs.stoneA > 0.02) {
+    draw(meshes.stone, matTransform(-0.42, -0.22, 0.04, t * 0.8, t * 1.1, 0, 1.25, 1.25, 1.25), [0.94, 0.72, 0.18], organs.stoneA, 1.4, 2.0);
+  }
+
+  // 6. Костные и топографические ориентиры (XII пара ребер, пупок, гребни подвздошных костей)
+  const boneCol = [0.85, 0.80, 0.71];
+  draw(meshes.ribR, matTransform(0, 0, 0, 0, 0, 0, 1, 1, 1), boneCol, 0.92, 2.0);
+  draw(meshes.ribL, matTransform(0, 0, 0, 0, 0, 0, 1, 1, 1), boneCol, 0.92, 2.0);
+
+  if (showTorso) {
+    // Ориентиры передней брюшной стенки: пупок и передние верхние ости подвздошных костей (linea bispinalis)
+    draw(meshes.navel, matTransform(0.0, 0.22, 0.78, 0, 0, 0, 1, 1, 1), [0.45, 0.38, 0.34], 0.45, 1.5);
+    draw(meshes.spinaR, matTransform(-0.68, -0.46, 0.62, 0, 0, 0, 1, 1, 1), boneCol, 0.55, 1.5);
+    draw(meshes.spinaL, matTransform(0.68, -0.46, 0.62, 0, 0, 0, 1, 1, 1), boneCol, 0.55, 1.5);
+
+    // Полупрозрачный рентген-контур торса
+    gl.depthMask(false);
+    draw(meshes.torso, matTransform(0, -0.1, 0.04, 0, 0, 0, 1, 1, 1), [0.44, 0.40, 0.36], 0.075, 1.75);
+    gl.depthMask(true);
+  }
+
+  // 7. Проекция 3D-координат диагностических точек в экранные с проверкой глубины (окклюзии)
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const camDist = Math.hypot(eye[0], eye[1] + 0.12, eye[2]);
+
+  POINTS.forEach(pt => {
+    const el = pinEls[pt.id];
+    const p = [...pt.pos];
+    if (pt.id === 'palpation_r') p[1] = organs.rkY + breath;
+
+    const s = toScreen(p, proj, view, w, h);
+    if (s.visible) {
+      el.style.display = 'flex';
+      el.style.left = `${s.x}px`;
+      el.style.top = `${s.y}px`;
+
+      // Приглушаем точки на обратной стороне модели (если глубина дальше центра сцены)
+      const isBackside = (-s.depth) > (camDist + 0.15);
+      el.classList.toggle('occluded', isBackside);
+    } else {
+      el.style.display = 'none';
+    }
+  });
+
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
